@@ -3,17 +3,25 @@ const cors = require("cors");
 require("dotenv").config();
 
 const pool = require("./db");
+const { sendEmail } = require("./emailService");
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 
+// ==========================================
+// ROOT API
+// ==========================================
 app.get("/", (req, res) => {
   res.json({
     message: "AI Notification Manager API is running",
   });
 });
+
+// ==========================================
+// GET ALL KPIs
+// ==========================================
 app.get("/api/kpis", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -33,11 +41,16 @@ app.get("/api/kpis", async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error("Error fetching KPIs:", error);
+
     res.status(500).json({
       error: "Failed to fetch KPI data",
     });
   }
 });
+
+// ==========================================
+// KPI MONITORING
+// ==========================================
 app.get("/api/monitoring", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -65,78 +78,92 @@ app.get("/api/monitoring", async (req, res) => {
     `);
 
     const monitoringData = result.rows.map((kpi) => {
-  const current = Number(kpi.current_value);
-  const target = Number(kpi.target_value);
-  const warning = Number(kpi.warning_threshold);
-  const critical = Number(kpi.critical_threshold);
+      const current = Number(kpi.current_value);
+      const target = Number(kpi.target_value);
+      const warning = Number(kpi.warning_threshold);
+      const critical = Number(kpi.critical_threshold);
 
-  let status = "NORMAL";
+      let status = "NORMAL";
 
-  // Higher value is better
-  // Example: Sales Revenue, Operational Efficiency
-  if (target > warning && warning > critical) {
-    if (current <= critical) {
-      status = "CRITICAL";
-    } else if (current <= warning) {
-      status = "WARNING";
+      // Higher value is better
+      // Example: Sales Revenue, Operational Efficiency
+      if (target > warning && warning > critical) {
+        if (current <= critical) {
+          status = "CRITICAL";
+        } else if (current <= warning) {
+          status = "WARNING";
+        }
+      }
+
+      // Lower value is better
+      // Example: Expenses, Downtime, Response Time
+      else if (target < warning && warning < critical) {
+        if (current >= critical) {
+          status = "CRITICAL";
+        } else if (current >= warning) {
+          status = "WARNING";
+        }
+      }
+
+      return {
+        ...kpi,
+        status,
+      };
+    });
+
+    // Automatically create alerts for WARNING and CRITICAL KPIs
+    for (const kpi of monitoringData) {
+      if (kpi.status === "WARNING" || kpi.status === "CRITICAL") {
+
+        // Check if an unresolved alert already exists
+        const existingAlert = await pool.query(
+          `
+          SELECT id
+          FROM alerts
+          WHERE kpi_id = $1
+          AND status = $2
+          AND is_resolved = FALSE
+          LIMIT 1
+          `,
+          [kpi.id, kpi.status]
+        );
+
+        // Create new alert only if one does not already exist
+        if (existingAlert.rows.length === 0) {
+          const message =
+            `${kpi.kpi_name} in ${kpi.department} is currently ${kpi.status}. ` +
+            `Current value: ${kpi.current_value} ${kpi.unit}`;
+
+          await pool.query(
+            `
+            INSERT INTO alerts
+            (kpi_id, status, message, current_value)
+            VALUES ($1, $2, $3, $4)
+            `,
+            [kpi.id, kpi.status, message, kpi.current_value]
+          );
+
+          console.log(
+            `New ${kpi.status} alert created for ${kpi.kpi_name}`
+          );
+        }
+      }
     }
-  }
 
-  // Lower value is better
-  // Example: Expenses, Downtime, Response Time
-  else if (target < warning && warning < critical) {
-    if (current >= critical) {
-      status = "CRITICAL";
-    } else if (current >= warning) {
-      status = "WARNING";
-    }
-  }
+    res.json(monitoringData);
 
-  return {
-    ...kpi,
-    status,
-  };
-});
-// Automatically create alerts for WARNING and CRITICAL KPIs
-for (const kpi of monitoringData) {
-  if (kpi.status === "WARNING" || kpi.status === "CRITICAL") {
-    // Check if an unresolved alert already exists
-    const existingAlert = await pool.query(
-      `SELECT id
-       FROM alerts
-       WHERE kpi_id = $1
-       AND status = $2
-       AND is_resolved = FALSE
-       LIMIT 1`,
-      [kpi.id, kpi.status]
-    );
-
-    // Create a new alert only if one does not already exist
-    if (existingAlert.rows.length === 0) {
-      const message =
-        `${kpi.kpi_name} in ${kpi.department} is currently ${kpi.status}. ` +
-        `Current value: ${kpi.current_value} ${kpi.unit}`;
-
-      await pool.query(
-        `INSERT INTO alerts
-         (kpi_id, status, message, current_value)
-         VALUES ($1, $2, $3, $4)`,
-        [kpi.id, kpi.status, message, kpi.current_value]
-      );
-
-      console.log(`New ${kpi.status} alert created for ${kpi.kpi_name}`);
-    }
-  }
-}
-res.json(monitoringData);
   } catch (error) {
     console.error("Error fetching monitoring data:", error);
+
     res.status(500).json({
       error: "Failed to fetch monitoring data",
     });
   }
 });
-// Get all alerts
+
+// ==========================================
+// GET ALL ALERTS
+// ==========================================
 app.get("/api/alerts", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -157,6 +184,7 @@ app.get("/api/alerts", async (req, res) => {
     `);
 
     res.json(result.rows);
+
   } catch (error) {
     console.error("Error fetching alerts:", error);
 
@@ -166,7 +194,9 @@ app.get("/api/alerts", async (req, res) => {
   }
 });
 
-// Resolve an alert
+// ==========================================
+// RESOLVE ALERT
+// ==========================================
 app.put("/api/alerts/:id/resolve", async (req, res) => {
   try {
     const { id } = req.params;
@@ -193,6 +223,7 @@ app.put("/api/alerts/:id/resolve", async (req, res) => {
       message: "Alert resolved successfully",
       alert: result.rows[0],
     });
+
   } catch (error) {
     console.error("Error resolving alert:", error);
 
@@ -201,7 +232,10 @@ app.put("/api/alerts/:id/resolve", async (req, res) => {
     });
   }
 });
-// Get all notification routes
+
+// ==========================================
+// GET NOTIFICATION ROUTES
+// ==========================================
 app.get("/api/notification-routes", async (req, res) => {
   try {
     const result = await pool.query(`
@@ -220,13 +254,47 @@ app.get("/api/notification-routes", async (req, res) => {
     `);
 
     res.json(result.rows);
+
   } catch (error) {
     console.error("Error fetching notification routes:", error);
+
     res.status(500).json({
       error: "Failed to fetch notification routes",
     });
   }
 });
+
+// ==========================================
+// TEST EMAIL
+// ==========================================
+app.post("/api/test-email", async (req, res) => {
+  try {
+
+    await sendEmail(
+      process.env.EMAIL_USER,
+      "AI Notification Manager - Test Email",
+      "Success! Your AI Notification Manager email notification system is working correctly."
+    );
+
+    res.json({
+      success: true,
+      message: "Test email sent successfully",
+    });
+
+  } catch (error) {
+    console.error("Test email error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to send test email",
+      error: error.message,
+    });
+  }
+});
+
+// ==========================================
+// START SERVER
+// ==========================================
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
