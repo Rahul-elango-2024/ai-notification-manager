@@ -1,26 +1,57 @@
+/* ==========================================
+   GLOBAL RESET
+========================================== */
+
 * {
   box-sizing: border-box;
 }
 
-body {
+html,
+body,
+#root {
   margin: 0;
+  padding: 0;
+  width: 100%;
   min-width: 320px;
+  min-height: 100%;
+}
+
+body {
   min-height: 100vh;
   background: #0f172a;
   font-family: Arial, sans-serif;
   color: #f8fafc;
+  overflow-x: hidden;
 }
 
+button,
+input,
+select {
+  font-family: inherit;
+}
+
+
+/* ==========================================
+   MAIN DASHBOARD
+========================================== */
+
 .dashboard {
+  width: 100%;
   max-width: 1400px;
-  margin: auto;
+  margin: 0 auto;
   padding: 30px;
 }
+
+
+/* ==========================================
+   HEADER
+========================================== */
 
 .header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 20px;
   margin-bottom: 30px;
 }
 
@@ -30,7 +61,7 @@ body {
 }
 
 .header p {
-  margin-top: 8px;
+  margin: 8px 0 0;
   color: #94a3b8;
 }
 
@@ -48,19 +79,33 @@ body {
   color: white;
 }
 
+.refresh-btn:hover {
+  background: #2563eb;
+}
+
 .resolve-btn {
   background: #22c55e;
   color: white;
 }
 
+.resolve-btn:hover {
+  background: #16a34a;
+}
+
+
+/* ==========================================
+   SUMMARY CARDS
+========================================== */
+
 .summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 20px;
   margin-bottom: 40px;
 }
 
 .summary-card {
+  min-width: 0;
   background: #1e293b;
   border: 1px solid #334155;
   border-radius: 12px;
@@ -78,17 +123,30 @@ body {
   font-size: 32px;
 }
 
+
+/* ==========================================
+   SECTION TITLES
+========================================== */
+
 .section-title {
-  margin: 30px 0 20px;
+  margin: 40px 0 20px;
+  font-size: 26px;
+  text-align: center;
 }
+
+
+/* ==========================================
+   KPI GRID
+========================================== */
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 20px;
 }
 
 .kpi-card {
+  min-width: 0;
   background: #1e293b;
   padding: 22px;
   border-radius: 12px;
@@ -107,19 +165,33 @@ body {
   border-left: 5px solid #ef4444;
 }
 
+
+/* ==========================================
+   KPI HEADER
+========================================== */
+
 .kpi-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   gap: 15px;
 }
 
 .kpi-header h3 {
   margin: 0;
+  font-size: 20px;
+  word-break: break-word;
 }
 
+
+/* ==========================================
+   STATUS BADGES
+========================================== */
+
 .status {
-  padding: 5px 10px;
+  display: inline-block;
+  flex-shrink: 0;
+  padding: 6px 10px;
   border-radius: 20px;
   font-size: 12px;
   font-weight: bold;
@@ -140,14 +212,20 @@ body {
   color: #fca5a5;
 }
 
+
+/* ==========================================
+   KPI DETAILS
+========================================== */
+
 .department {
   color: #94a3b8;
 }
 
 .value {
+  margin: 20px 0;
   font-size: 27px;
   font-weight: bold;
-  margin: 20px 0;
+  word-break: break-word;
 }
 
 .thresholds {
@@ -161,10 +239,65 @@ body {
 }
 
 .source {
+  margin-top: 18px;
   color: #64748b;
   font-size: 13px;
+}
+
+
+/* ==========================================
+   KPI UPDATE FORM
+========================================== */
+
+.kpi-update {
+  display: flex;
+  gap: 10px;
   margin-top: 18px;
 }
+
+.kpi-update input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid #475569;
+  border-radius: 7px;
+  background: #0f172a;
+  color: #f8fafc;
+  outline: none;
+}
+
+.kpi-update input::placeholder {
+  color: #64748b;
+}
+
+.kpi-update input:focus {
+  border-color: #3b82f6;
+}
+
+.kpi-update button {
+  flex-shrink: 0;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 7px;
+  background: #3b82f6;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+.kpi-update button:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.kpi-update button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+/* ==========================================
+   ALERTS
+========================================== */
 
 .alerts-section {
   margin-top: 40px;
@@ -177,13 +310,23 @@ body {
 }
 
 .alert-card {
+  min-width: 0;
   background: #1e293b;
+  border: 1px solid #334155;
   border-radius: 10px;
   padding: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  border: 1px solid #334155;
+  gap: 20px;
+}
+
+.alert-card > div {
+  min-width: 0;
+}
+
+.alert-card p {
+  overflow-wrap: anywhere;
 }
 
 .alert-card.active {
@@ -202,18 +345,251 @@ body {
 }
 
 .resolved-label {
+  flex-shrink: 0;
   color: #86efac;
   font-weight: bold;
 }
 
 .no-alerts {
   background: #1e293b;
+  border: 1px solid #334155;
   padding: 25px;
   border-radius: 10px;
   color: #94a3b8;
 }
 
+
+/* ==========================================
+   NOTIFICATION ROUTING MANAGEMENT
+========================================== */
+
+.routing-section {
+  margin-top: 50px;
+}
+
+.route-management-card {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 12px;
+  padding: 22px;
+  margin-bottom: 25px;
+}
+
+.route-management-card h3 {
+  margin: 0 0 20px;
+}
+
+.route-form {
+  display: grid;
+  grid-template-columns:
+    minmax(150px, 1fr)
+    minmax(130px, 0.7fr)
+    minmax(110px, 0.6fr)
+    minmax(220px, 1.5fr)
+    auto;
+  gap: 12px;
+  align-items: center;
+}
+
+.route-form input,
+.route-form select {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  padding: 0 12px;
+  border: 1px solid #475569;
+  border-radius: 7px;
+  background: #0f172a;
+  color: #f8fafc;
+  outline: none;
+}
+
+.route-form input::placeholder {
+  color: #64748b;
+}
+
+.route-form input:focus,
+.route-form select:focus {
+  border-color: #3b82f6;
+}
+
+.route-form option {
+  background: #0f172a;
+  color: white;
+}
+
+.route-form button {
+  height: 42px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 7px;
+  background: #3b82f6;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.route-form button:hover:not(:disabled) {
+  background: #2563eb;
+}
+
+.route-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+
+/* ==========================================
+   ROUTE STATUS
+========================================== */
+
+.route-status {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.route-status.active {
+  background: #14532d;
+  color: #86efac;
+}
+
+.route-status.inactive {
+  background: #475569;
+  color: #cbd5e1;
+}
+
+
+/* ==========================================
+   ROUTE ACTION BUTTONS
+========================================== */
+
+.route-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.toggle-route-btn,
+.delete-route-btn {
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: white;
+  font-weight: bold;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.toggle-route-btn {
+  background: #f59e0b;
+}
+
+.toggle-route-btn:hover {
+  background: #d97706;
+}
+
+.delete-route-btn {
+  background: #ef4444;
+}
+
+.delete-route-btn:hover {
+  background: #dc2626;
+}
+
+
+/* ==========================================
+   NOTIFICATION HISTORY
+========================================== */
+
+.notification-section {
+  margin-top: 50px;
+}
+
+
+/* ==========================================
+   TABLES
+========================================== */
+
+.notification-table-container {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid #334155;
+  border-radius: 10px;
+}
+
+.notification-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #0f172a;
+}
+
+.notification-table th,
+.notification-table td {
+  padding: 16px;
+  border-bottom: 1px solid #334155;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.notification-table th {
+  background: #1e293b;
+  color: #94a3b8;
+  font-size: 13px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.notification-table td {
+  color: #e2e8f0;
+}
+
+.notification-table td:nth-child(3),
+.notification-table td:nth-child(4) {
+  overflow-wrap: anywhere;
+}
+
+.notification-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.notification-table tbody tr:hover {
+  background: #172033;
+}
+
+
+/* ==========================================
+   NOTIFICATION STATUS
+========================================== */
+
+.notification-status {
+  display: inline-block;
+  padding: 7px 11px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.notification-status.sent {
+  background: #14532d;
+  color: #86efac;
+}
+
+.notification-status.failed {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
+
+
+/* ==========================================
+   LOADING SCREEN
+========================================== */
+
 .loading {
+  width: 100%;
   min-height: 100vh;
   display: flex;
   justify-content: center;
@@ -223,27 +599,103 @@ body {
   font-size: 20px;
 }
 
-@media (max-width: 900px) {
-  .summary,
+
+/* ==========================================
+   TABLE SCROLLBAR
+========================================== */
+
+.notification-table-container::-webkit-scrollbar {
+  height: 8px;
+}
+
+.notification-table-container::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+
+.notification-table-container::-webkit-scrollbar-thumb {
+  background: #475569;
+  border-radius: 10px;
+}
+
+
+/* ==========================================
+   RESPONSIVE - TABLET
+========================================== */
+
+@media (max-width: 1100px) {
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .route-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .route-form button {
+    width: 100%;
   }
 }
 
-@media (max-width: 600px) {
+
+/* ==========================================
+   RESPONSIVE - SMALL TABLET
+========================================== */
+
+@media (max-width: 900px) {
+  .summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dashboard {
+    padding: 20px;
+  }
+}
+
+
+/* ==========================================
+   RESPONSIVE - MOBILE
+========================================== */
+
+@media (max-width: 650px) {
   .dashboard {
     padding: 15px;
   }
 
-  .header,
-  .alert-card {
+  .header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 15px;
   }
 
   .summary,
-  .kpi-grid {
+  .kpi-grid,
+  .route-form {
     grid-template-columns: 1fr;
+  }
+
+  .kpi-update {
+    flex-direction: column;
+  }
+
+  .kpi-update button {
+    width: 100%;
+  }
+
+  .alert-card {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .route-actions {
+    flex-direction: column;
+  }
+
+  .toggle-route-btn,
+  .delete-route-btn {
+    width: 100%;
+  }
+
+  .notification-table th,
+  .notification-table td {
+    padding: 12px;
   }
 }
