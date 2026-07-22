@@ -15,7 +15,7 @@ app.use(cors());
 app.use(express.json());
 
 // ==========================================
-// RETRY CONFIGURATION
+// CONFIGURATION
 // ==========================================
 
 const MAX_EMAIL_RETRIES = 3;
@@ -64,6 +64,505 @@ app.get("/api/kpis", async (req, res) => {
 });
 
 // ==========================================
+// MULTI-LEVEL ESCALATION FUNCTION
+// ==========================================
+
+async function startEscalation({
+  alertId,
+  kpi,
+  originalRecipient,
+}) {
+  try {
+    console.log(
+      `Starting database-driven escalation for Alert #${alertId}`
+    );
+
+    // Get the first active escalation rule.
+    // Later levels will be processed by the scheduled escalation checker.
+    const ruleResult = await pool.query(
+      `
+      SELECT
+        id,
+        department_id,
+        severity,
+        escalation_level,
+        recipient,
+        channel,
+        escalate_after_minutes
+      FROM escalation_rules
+      WHERE department_id = $1
+        AND severity = $2
+        AND is_active = TRUE
+      ORDER BY escalation_level ASC
+      LIMIT 1
+      `,
+      [kpi.department_id, kpi.status]
+    );
+
+    if (ruleResult.rows.length === 0) {
+      console.log(
+        `No escalation rule found for ${kpi.department} - ${kpi.status}`
+      );
+
+      return;
+    }
+
+    const rule = ruleResult.rows[0];
+
+    // Make sure the alert still exists and is unresolved.
+    const alertResult = await pool.query(
+      `
+      SELECT
+        id,
+        is_resolved,
+        escalation_level
+      FROM alerts
+      WHERE id = $1
+      LIMIT 1
+      `,
+      [alertId]
+    );
+
+    if (alertResult.rows.length === 0) {
+      console.log(
+        `Alert #${alertId} does not exist`
+      );
+
+      return;
+    }
+
+    const alert = alertResult.rows[0];
+
+    if (alert.is_resolved) {
+      console.log(
+        `Alert #${alertId} is already resolved. Escalation cancelled.`
+      );
+
+      return;
+    }
+
+    if (
+      Number(alert.escalation_level || 0) >=
+      Number(rule.escalation_level)
+    ) {
+      console.log(
+        `Alert #${alertId} is already at escalation Level ${alert.escalation_level}`
+      );
+
+      return;
+    }
+
+    // Update the alert to Level 1.
+    const escalatedAlert = await pool.query(
+      `
+      UPDATE alerts
+      SET
+        escalation_level = $1,
+        escalation_status = 'ESCALATED',
+        last_escalated_at = CURRENT_TIMESTAMP
+      WHERE id = $2
+        AND is_resolved = FALSE
+        AND COALESCE(escalation_level, 0) < $1
+      RETURNING *
+      `,
+      [
+        rule.escalation_level,
+        alertId,
+      ]
+    );
+
+    if (escalatedAlert.rows.length === 0) {
+      console.log(
+        `Alert #${alertId} was not escalated because it was already escalated or resolved`
+      );
+
+      return;
+    }
+
+    // Update the failed original notification log.
+    await pool.query(
+      `
+      UPDATE notification_logs
+      SET
+        escalation_level = $1
+      WHERE alert_id = $2
+        AND recipient = $3
+        AND status = 'FAILED'
+      `,
+      [
+        rule.escalation_level,
+        alertId,
+        originalRecipient,
+      ]
+    );
+
+    console.log(
+      `Alert #${alertId} automatically escalated to Level ${rule.escalation_level}`
+    );
+
+    console.log(
+      `Escalation recipient: ${rule.recipient}`
+    );
+
+    console.log(
+      `Escalation Status: ESCALATED`
+    );
+
+    console.log(
+      `Next escalation threshold: ${rule.escalate_after_minutes} minute(s)`
+    );
+  } catch (error) {
+    console.error(
+      `Automatic escalation failed for Alert #${alertId}:`,
+      error
+    );
+  }
+}
+
+// ==========================================
+// PROCESS TIME-BASED ESCALATIONS
+// ==========================================
+
+async function processTimedEscalations() {
+  try {
+    console.log(
+      "Checking for timed escalations..."
+    );
+
+    const alertsResult = await pool.query(
+      `
+      SELECT
+        a.id,
+        a.kpi_id,
+        a.status,
+        a.message,
+        a.current_value,
+        a.created_at,
+        a.escalation_level,
+        a.last_escalated_at,
+
+        k.name AS kpi_name,
+        k.department_id,
+        k.unit,
+        k.target_value,
+
+        d.name AS department
+
+      FROM alerts a
+
+      JOIN kpis k
+        ON a.kpi_id = k.id
+
+      JOIN departments d
+        ON k.department_id = d.id
+
+      WHERE a.is_resolved = FALSE
+        AND COALESCE(a.escalation_level, 0) > 0
+
+      ORDER BY a.created_at ASC
+      `
+    );
+
+    for (const alert of alertsResult.rows) {
+      const currentLevel =
+        Number(alert.escalation_level || 0);
+
+      // Get the next active escalation rule.
+      const nextRuleResult = await pool.query(
+        `
+        SELECT
+          id,
+          department_id,
+          severity,
+          escalation_level,
+          recipient,
+          channel,
+          escalate_after_minutes
+        FROM escalation_rules
+        WHERE department_id = $1
+          AND severity = $2
+          AND escalation_level > $3
+          AND is_active = TRUE
+        ORDER BY escalation_level ASC
+        LIMIT 1
+        `,
+        [
+          alert.department_id,
+          alert.status,
+          currentLevel,
+        ]
+      );
+
+      if (nextRuleResult.rows.length === 0) {
+        continue;
+      }
+
+      const nextRule =
+        nextRuleResult.rows[0];
+
+      // ==========================================
+      // POSTGRESQL-BASED TIME CHECK
+      // ==========================================
+      //
+      // PostgreSQL calculates whether the escalation
+      // is due instead of Node.js.
+      //
+      // This prevents timezone differences between
+      // JavaScript Date and PostgreSQL timestamps
+      // from blocking Level 2 -> Level 3 escalation.
+      // ==========================================
+
+      const dueResult = await pool.query(
+        `
+        SELECT
+          CURRENT_TIMESTAMP >=
+          $1::timestamp +
+          ($2::numeric * INTERVAL '1 minute')
+          AS escalation_due
+        `,
+        [
+          alert.last_escalated_at ||
+            alert.created_at,
+
+          nextRule.escalate_after_minutes,
+        ]
+      );
+
+      const escalationDue =
+        dueResult.rows[0].escalation_due;
+
+      console.log(
+        `Alert #${alert.id}: current Level ${currentLevel}, next Level ${nextRule.escalation_level}, due: ${escalationDue}`
+      );
+
+      if (!escalationDue) {
+        continue;
+      }
+
+      // ==========================================
+      // ATOMIC ESCALATION UPDATE
+      // ==========================================
+      //
+      // The current escalation level must still
+      // match the level that we originally read.
+      //
+      // This prevents duplicate escalation when
+      // multiple checker executions overlap.
+      // ==========================================
+
+      const updateResult = await pool.query(
+        `
+        UPDATE alerts
+        SET
+          escalation_level = $1,
+          escalation_status = 'ESCALATED',
+          last_escalated_at = CURRENT_TIMESTAMP
+        WHERE id = $2
+          AND is_resolved = FALSE
+          AND COALESCE(escalation_level, 0) = $3
+        RETURNING *
+        `,
+        [
+          nextRule.escalation_level,
+          alert.id,
+          currentLevel,
+        ]
+      );
+
+      if (updateResult.rows.length === 0) {
+        console.log(
+          `Alert #${alert.id}: escalation skipped because its state changed`
+        );
+
+        continue;
+      }
+
+      console.log(
+        `Alert #${alert.id} escalated from Level ${currentLevel} to Level ${nextRule.escalation_level}`
+      );
+
+      console.log(
+        `Escalation recipient: ${nextRule.recipient}`
+      );
+
+      // Only EMAIL is currently supported.
+      if (nextRule.channel !== "EMAIL") {
+        console.log(
+          `Unsupported escalation channel: ${nextRule.channel}`
+        );
+
+        continue;
+      }
+
+      const escalationSubject =
+        `ESCALATION LEVEL ${nextRule.escalation_level} - ${alert.status} Alert - ${alert.kpi_name}`;
+
+      const escalationBody = `
+AI NOTIFICATION MANAGER
+============================================
+
+AUTOMATIC ESCALATION
+
+Escalation Level:
+${nextRule.escalation_level}
+
+Alert ID:
+${alert.id}
+
+KPI:
+${alert.kpi_name}
+
+Department:
+${alert.department}
+
+Severity:
+${alert.status}
+
+Current Value:
+${alert.current_value} ${alert.unit}
+
+Target Value:
+${alert.target_value} ${alert.unit}
+
+============================================
+ALERT MESSAGE
+============================================
+
+${alert.message}
+
+============================================
+
+This alert remains unresolved and has automatically
+advanced from escalation Level ${currentLevel}
+to escalation Level ${nextRule.escalation_level}.
+
+Escalation Recipient:
+${nextRule.recipient}
+
+This is an automated escalation generated by
+AI Notification Manager.
+`;
+
+      const deliveryResult =
+        await sendEmailWithRetry(
+          nextRule.recipient,
+          escalationSubject,
+          escalationBody,
+          {
+            maxRetries: MAX_EMAIL_RETRIES,
+            retryDelay: EMAIL_RETRY_DELAY,
+          }
+        );
+
+      if (deliveryResult.success) {
+        console.log(
+          `Level ${nextRule.escalation_level} escalation email delivered successfully to ${nextRule.recipient}`
+        );
+
+        await pool.query(
+          `
+          INSERT INTO notification_logs
+          (
+            alert_id,
+            recipient,
+            channel,
+            status,
+            error_message,
+            retry_count,
+            max_retries,
+            next_retry_at,
+            last_retry_at,
+            escalation_level
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10
+          )
+          `,
+          [
+            alert.id,
+            nextRule.recipient,
+            "EMAIL",
+            "SENT",
+            null,
+            deliveryResult.retryCount,
+            MAX_EMAIL_RETRIES,
+            null,
+
+            deliveryResult.retryCount > 0
+              ? new Date()
+              : null,
+
+            nextRule.escalation_level,
+          ]
+        );
+      } else {
+        console.error(
+          `Level ${nextRule.escalation_level} escalation email failed for ${nextRule.recipient}`
+        );
+
+        await pool.query(
+          `
+          INSERT INTO notification_logs
+          (
+            alert_id,
+            recipient,
+            channel,
+            status,
+            error_message,
+            retry_count,
+            max_retries,
+            next_retry_at,
+            last_retry_at,
+            escalation_level
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10
+          )
+          `,
+          [
+            alert.id,
+            nextRule.recipient,
+            "EMAIL",
+            "FAILED",
+            deliveryResult.error,
+            deliveryResult.retryCount,
+            MAX_EMAIL_RETRIES,
+            null,
+            new Date(),
+            nextRule.escalation_level,
+          ]
+        );
+      }
+    }
+  } catch (error) {
+    console.error(
+      "Timed escalation processing failed:",
+      error
+    );
+  }
+}
+
+// ==========================================
 // KPI MONITORING
 // ==========================================
 
@@ -98,37 +597,51 @@ app.get("/api/monitoring", async (req, res) => {
       ORDER BY k.id
     `);
 
-    const monitoringData = result.rows.map((kpi) => {
-      const current = Number(kpi.current_value);
-      const target = Number(kpi.target_value);
-      const warning = Number(kpi.warning_threshold);
-      const critical = Number(kpi.critical_threshold);
+    const monitoringData =
+      result.rows.map((kpi) => {
+        const current =
+          Number(kpi.current_value);
 
-      let status = "NORMAL";
+        const target =
+          Number(kpi.target_value);
 
-      // Higher value is better
-      if (target > warning && warning > critical) {
-        if (current <= critical) {
-          status = "CRITICAL";
-        } else if (current <= warning) {
-          status = "WARNING";
+        const warning =
+          Number(kpi.warning_threshold);
+
+        const critical =
+          Number(kpi.critical_threshold);
+
+        let status = "NORMAL";
+
+        // Higher value is better.
+        if (
+          target > warning &&
+          warning > critical
+        ) {
+          if (current <= critical) {
+            status = "CRITICAL";
+          } else if (current <= warning) {
+            status = "WARNING";
+          }
         }
-      }
 
-      // Lower value is better
-      else if (target < warning && warning < critical) {
-        if (current >= critical) {
-          status = "CRITICAL";
-        } else if (current >= warning) {
-          status = "WARNING";
+        // Lower value is better.
+        else if (
+          target < warning &&
+          warning < critical
+        ) {
+          if (current >= critical) {
+            status = "CRITICAL";
+          } else if (current >= warning) {
+            status = "WARNING";
+          }
         }
-      }
 
-      return {
-        ...kpi,
-        status,
-      };
-    });
+        return {
+          ...kpi,
+          status,
+        };
+      });
 
     // ==========================================
     // CREATE ALERTS AND SEND NOTIFICATIONS
@@ -143,22 +656,28 @@ app.get("/api/monitoring", async (req, res) => {
       }
 
       // ==========================================
-      // CHECK FOR EXISTING UNRESOLVED ALERT
+      // CHECK EXISTING ACTIVE ALERT
       // ==========================================
 
-      const existingAlert = await pool.query(
-        `
-        SELECT id
-        FROM alerts
-        WHERE kpi_id = $1
-          AND status = $2
-          AND is_resolved = FALSE
-        LIMIT 1
-        `,
-        [kpi.id, kpi.status]
-      );
+      const existingAlert =
+        await pool.query(
+          `
+          SELECT id
+          FROM alerts
+          WHERE kpi_id = $1
+            AND status = $2
+            AND is_resolved = FALSE
+          LIMIT 1
+          `,
+          [
+            kpi.id,
+            kpi.status,
+          ]
+        );
 
-      if (existingAlert.rows.length > 0) {
+      if (
+        existingAlert.rows.length > 0
+      ) {
         continue;
       }
 
@@ -166,18 +685,15 @@ app.get("/api/monitoring", async (req, res) => {
       // GENERATE AI ANALYSIS
       // ==========================================
 
-      const aiAnalysis = generateAIAnalysis(
-        kpi,
-        kpi.status
-      );
+      const aiAnalysis =
+        generateAIAnalysis(
+          kpi,
+          kpi.status
+        );
 
       console.log(
         `AI analysis generated for ${kpi.kpi_name}`
       );
-
-      // ==========================================
-      // CREATE ALERT MESSAGE
-      // ==========================================
 
       const message =
         `${aiAnalysis.summary}\n\n` +
@@ -185,67 +701,88 @@ app.get("/api/monitoring", async (req, res) => {
         `Recommendation: ${aiAnalysis.recommendation}`;
 
       // ==========================================
-      // CREATE ALERT
+      // CREATE ALERT WITH DUPLICATE PROTECTION
       // ==========================================
 
-      const newAlert = await pool.query(
-        `
-        INSERT INTO alerts
-        (
-          kpi_id,
-          status,
-          message,
-          current_value,
-          risk_score,
-          risk_level,
-          deviation_percentage,
-          deviation_direction,
-          impact_summary,
-          possible_causes,
-          recommended_actions,
-          ai_timeline,
-          ai_generated_at,
-          escalation_level,
-          escalation_status
-        )
-        VALUES
-        (
-          $1,
-          $2,
-          $3,
-          $4,
-          $5,
-          $6,
-          $7,
-          $8,
-          $9,
-          $10::jsonb,
-          $11::jsonb,
-          $12::jsonb,
-          $13,
-          0,
-          'NOT_ESCALATED'
-        )
-        RETURNING *
-        `,
-        [
-          kpi.id,
-          kpi.status,
-          message,
-          kpi.current_value,
-          aiAnalysis.riskScore,
-          aiAnalysis.riskLevel,
-          aiAnalysis.deviationPercentage,
-          aiAnalysis.deviationDirection,
-          aiAnalysis.impactSummary,
-          JSON.stringify(aiAnalysis.possibleCauses || []),
-          JSON.stringify(aiAnalysis.recommendedActions || []),
-          JSON.stringify(aiAnalysis.timeline || []),
-          aiAnalysis.generatedAt,
-        ]
-      );
+      const newAlert =
+        await pool.query(
+          `
+          INSERT INTO alerts
+          (
+            kpi_id,
+            status,
+            message,
+            current_value,
+            risk_score,
+            risk_level,
+            deviation_percentage,
+            deviation_direction,
+            impact_summary,
+            possible_causes,
+            recommended_actions,
+            ai_timeline,
+            ai_generated_at,
+            escalation_level,
+            escalation_status
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10::jsonb,
+            $11::jsonb,
+            $12::jsonb,
+            $13,
+            0,
+            'NOT_ESCALATED'
+          )
+          ON CONFLICT (kpi_id, status)
+          WHERE is_resolved = FALSE
+          DO NOTHING
+          RETURNING *
+          `,
+          [
+            kpi.id,
+            kpi.status,
+            message,
+            kpi.current_value,
+            aiAnalysis.riskScore,
+            aiAnalysis.riskLevel,
+            aiAnalysis.deviationPercentage,
+            aiAnalysis.deviationDirection,
+            aiAnalysis.impactSummary,
+            JSON.stringify(
+              aiAnalysis.possibleCauses || []
+            ),
+            JSON.stringify(
+              aiAnalysis.recommendedActions || []
+            ),
+            JSON.stringify(
+              aiAnalysis.timeline || []
+            ),
+            aiAnalysis.generatedAt,
+          ]
+        );
 
-      const alertId = newAlert.rows[0].id;
+      if (
+        newAlert.rows.length === 0
+      ) {
+        console.log(
+          `Duplicate active ${kpi.status} alert prevented for ${kpi.kpi_name}`
+        );
+
+        continue;
+      }
+
+      const alertId =
+        newAlert.rows[0].id;
 
       console.log(
         `New ${kpi.status} alert created for ${kpi.kpi_name}`
@@ -262,36 +799,36 @@ app.get("/api/monitoring", async (req, res) => {
       console.log(
         `Deviation: ${aiAnalysis.deviationText}`
       );
-
-      // ==========================================
+            // ==========================================
       // SMART ROUTING
       // ==========================================
 
-      const routes = await pool.query(
-        `
-        SELECT
-          id,
-          recipient,
-          severity,
-          channel
-        FROM notification_routes
-        WHERE department_id = $1
-          AND severity = $2
-          AND channel = 'EMAIL'
-          AND is_active = TRUE
-        ORDER BY id
-        `,
-        [kpi.department_id, kpi.status]
-      );
+      const routes =
+        await pool.query(
+          `
+          SELECT
+            id,
+            recipient,
+            severity,
+            channel
+          FROM notification_routes
+          WHERE department_id = $1
+            AND severity = $2
+            AND channel = 'EMAIL'
+            AND is_active = TRUE
+          ORDER BY id
+          `,
+          [
+            kpi.department_id,
+            kpi.status,
+          ]
+        );
 
-      // ==========================================
-      // NO MATCHING ROUTE
-      // ==========================================
-
-      if (routes.rows.length === 0) {
+      if (
+        routes.rows.length === 0
+      ) {
         console.log(
-          `No active email notification route found for ` +
-          `${kpi.department} - ${kpi.status}`
+          `No active email notification route found for ${kpi.department} - ${kpi.status}`
         );
 
         continue;
@@ -372,17 +909,8 @@ ${aiAnalysis.riskLevel}
 Deviation:
 ${aiAnalysis.deviationText}
 
-============================================
-AI IMPACT SUMMARY
-============================================
-
+Impact:
 ${aiAnalysis.impactSummary}
-
-============================================
-AI ANALYSIS
-============================================
-
-${aiAnalysis.analysis}
 
 ============================================
 POSSIBLE CAUSES
@@ -398,15 +926,12 @@ ${recommendedActionsText}
 
 ============================================
 
-Analysis Generated At:
-${aiAnalysis.generatedAt}
-
-This is an automated intelligent notification
-generated by AI Notification Manager.
+This notification was automatically generated
+by the AI Notification Manager.
 `;
 
       // ==========================================
-      // SEND EMAILS WITH AUTOMATIC RETRY
+      // SEND NOTIFICATIONS
       // ==========================================
 
       for (const route of routes.rows) {
@@ -420,22 +945,17 @@ generated by AI Notification Manager.
             emailSubject,
             emailBody,
             {
-              maxRetries: MAX_EMAIL_RETRIES,
-              retryDelay: EMAIL_RETRY_DELAY,
+              maxRetries:
+                MAX_EMAIL_RETRIES,
+
+              retryDelay:
+                EMAIL_RETRY_DELAY,
             }
           );
 
-        // ==========================================
-        // SUCCESSFUL DELIVERY
-        // ==========================================
-
         if (deliveryResult.success) {
           console.log(
-            `Alert email delivered successfully to ${route.recipient}`
-          );
-
-          console.log(
-            `Total attempts: ${deliveryResult.attempts}`
+            `Notification delivered successfully to ${route.recipient}`
           );
 
           await pool.query(
@@ -470,166 +990,86 @@ generated by AI Notification Manager.
             [
               alertId,
               route.recipient,
-              "EMAIL",
+              route.channel,
               "SENT",
               null,
               deliveryResult.retryCount,
               MAX_EMAIL_RETRIES,
               null,
+
               deliveryResult.retryCount > 0
                 ? new Date()
                 : null,
+
+              0,
+            ]
+          );
+        } else {
+          console.error(
+            `Email delivery permanently failed for ${route.recipient}`
+          );
+
+          console.error(
+            `Attempts: ${deliveryResult.attempts}`
+          );
+
+          console.error(
+            `Error: ${deliveryResult.error}`
+          );
+
+          await pool.query(
+            `
+            INSERT INTO notification_logs
+            (
+              alert_id,
+              recipient,
+              channel,
+              status,
+              error_message,
+              retry_count,
+              max_retries,
+              next_retry_at,
+              last_retry_at,
+              escalation_level
+            )
+            VALUES
+            (
+              $1,
+              $2,
+              $3,
+              $4,
+              $5,
+              $6,
+              $7,
+              $8,
+              $9,
+              $10
+            )
+            `,
+            [
+              alertId,
+              route.recipient,
+              route.channel,
+              "FAILED",
+              deliveryResult.error,
+              deliveryResult.retryCount,
+              MAX_EMAIL_RETRIES,
+              null,
+              new Date(),
               0,
             ]
           );
 
           console.log(
-            `Successful notification log saved for ${route.recipient}`
+            `Failed notification logged for ${route.recipient}`
           );
 
-          continue;
-        }
-
-        // ==========================================
-        // DELIVERY FAILED AFTER ALL RETRIES
-        // ==========================================
-
-        console.error(
-          `Email delivery permanently failed for ${route.recipient}`
-        );
-
-        console.error(
-          `Attempts: ${deliveryResult.attempts}`
-        );
-
-        console.error(
-          `Error: ${deliveryResult.error}`
-        );
-
-        // ==========================================
-        // SAVE FAILED NOTIFICATION
-        // ==========================================
-
-        await pool.query(
-          `
-          INSERT INTO notification_logs
-          (
-            alert_id,
-            recipient,
-            channel,
-            status,
-            error_message,
-            retry_count,
-            max_retries,
-            next_retry_at,
-            last_retry_at,
-            escalation_level
-          )
-          VALUES
-          (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7,
-            $8,
-            $9,
-            $10
-          )
-          `,
-          [
+          await startEscalation({
             alertId,
-            route.recipient,
-            "EMAIL",
-            "FAILED",
-            deliveryResult.error,
-            deliveryResult.retryCount,
-            MAX_EMAIL_RETRIES,
-            null,
-            new Date(),
-            0,
-          ]
-        );
-
-        console.log(
-          `Failed notification logged for ${route.recipient}`
-        );
-
-        // ==========================================
-        // AUTOMATIC ESCALATION
-        // ==========================================
-
-        try {
-          console.log(
-            `Starting automatic escalation for Alert #${alertId}`
-          );
-
-          const escalationLevel = 1;
-
-          // ==========================================
-          // UPDATE ALERT ESCALATION STATUS
-          // ==========================================
-
-          const escalatedAlert =
-            await pool.query(
-              `
-              UPDATE alerts
-              SET
-                escalation_level = $1,
-                escalation_status = 'ESCALATED',
-                last_escalated_at = CURRENT_TIMESTAMP
-              WHERE id = $2
-                AND is_resolved = FALSE
-              RETURNING *
-              `,
-              [
-                escalationLevel,
-                alertId,
-              ]
-            );
-
-          if (escalatedAlert.rows.length === 0) {
-            console.log(
-              `Alert #${alertId} was not escalated because it is already resolved or does not exist`
-            );
-
-            continue;
-          }
-
-          // ==========================================
-          // UPDATE FAILED NOTIFICATION LOG
-          // ==========================================
-
-          await pool.query(
-            `
-            UPDATE notification_logs
-            SET
-              escalation_level = $1
-            WHERE alert_id = $2
-              AND recipient = $3
-              AND status = 'FAILED'
-            `,
-            [
-              escalationLevel,
-              alertId,
+            kpi,
+            originalRecipient:
               route.recipient,
-            ]
-          );
-
-          console.log(
-            `Alert #${alertId} automatically escalated to Level ${escalationLevel}`
-          );
-
-          console.log(
-            `Escalation Status: ESCALATED`
-          );
-        } catch (escalationError) {
-          console.error(
-            `Automatic escalation failed for Alert #${alertId}:`,
-            escalationError
-          );
+          });
         }
       }
     }
@@ -637,120 +1077,16 @@ generated by AI Notification Manager.
     res.json(monitoringData);
   } catch (error) {
     console.error(
-      "Error fetching monitoring data:",
+      "Monitoring error:",
       error
     );
 
     res.status(500).json({
-      error: "Failed to fetch monitoring data",
+      error:
+        "Failed to fetch monitoring data",
     });
   }
 });
-
-// ==========================================
-// UPDATE KPI VALUE / ADD NEW KPI READING
-// ==========================================
-
-app.post(
-  "/api/kpis/:id/readings",
-  async (req, res) => {
-    try {
-      const { id } = req.params;
-
-      const {
-        value,
-        source = "Manual Dashboard Update",
-      } = req.body;
-
-      if (
-        value === undefined ||
-        value === null ||
-        value === ""
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "KPI value is required",
-        });
-      }
-
-      const numericValue = Number(value);
-
-      if (Number.isNaN(numericValue)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "KPI value must be a valid number",
-        });
-      }
-
-      const kpiResult = await pool.query(
-        `
-        SELECT
-          id,
-          name
-        FROM kpis
-        WHERE id = $1
-        `,
-        [id]
-      );
-
-      if (kpiResult.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "KPI not found",
-        });
-      }
-
-      const result = await pool.query(
-        `
-        INSERT INTO kpi_readings
-        (
-          kpi_id,
-          value,
-          source,
-          recorded_at
-        )
-        VALUES
-        (
-          $1,
-          $2,
-          $3,
-          CURRENT_TIMESTAMP
-        )
-        RETURNING *
-        `,
-        [
-          id,
-          numericValue,
-          source,
-        ]
-      );
-
-      console.log(
-        `New KPI reading added: ${kpiResult.rows[0].name} = ${numericValue}`
-      );
-
-      res.status(201).json({
-        success: true,
-        message:
-          "KPI value updated successfully",
-        reading: result.rows[0],
-      });
-    } catch (error) {
-      console.error(
-        "Error updating KPI value:",
-        error
-      );
-
-      res.status(500).json({
-        success: false,
-        message:
-          "Failed to update KPI value",
-        error: error.message,
-      });
-    }
-  }
-);
 
 // ==========================================
 // GET ALL ALERTS
@@ -758,48 +1094,38 @@ app.post(
 
 app.get("/api/alerts", async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT
-        a.id,
-        a.status,
-        a.message,
-        a.current_value,
-        a.is_resolved,
-        a.created_at,
-        a.resolved_at,
-
-        a.risk_score,
-        a.risk_level,
-        a.deviation_percentage,
-        a.deviation_direction,
-        a.impact_summary,
-        a.possible_causes,
-        a.recommended_actions,
-        a.ai_timeline,
-        a.ai_generated_at,
-
-        a.escalation_level,
-        a.escalation_status,
-        a.last_escalated_at,
-
-        k.name AS kpi_name,
-        k.unit,
-        k.target_value,
-        k.warning_threshold,
-        k.critical_threshold,
-
-        d.name AS department
-
-      FROM alerts a
-
-      JOIN kpis k
-        ON a.kpi_id = k.id
-
-      JOIN departments d
-        ON k.department_id = d.id
-
-      ORDER BY a.created_at DESC
-    `);
+    const result =
+      await pool.query(`
+        SELECT
+          a.id,
+          a.kpi_id,
+          k.name AS kpi_name,
+          d.name AS department,
+          a.status,
+          a.message,
+          a.current_value,
+          a.risk_score,
+          a.risk_level,
+          a.deviation_percentage,
+          a.deviation_direction,
+          a.impact_summary,
+          a.possible_causes,
+          a.recommended_actions,
+          a.ai_timeline,
+          a.ai_generated_at,
+          a.escalation_level,
+          a.escalation_status,
+          a.last_escalated_at,
+          a.is_resolved,
+          a.resolved_at,
+          a.created_at
+        FROM alerts a
+        JOIN kpis k
+          ON a.kpi_id = k.id
+        JOIN departments d
+          ON k.department_id = d.id
+        ORDER BY a.created_at DESC
+      `);
 
     res.json(result.rows);
   } catch (error) {
@@ -809,7 +1135,8 @@ app.get("/api/alerts", async (req, res) => {
     );
 
     res.status(500).json({
-      error: "Failed to fetch alerts",
+      error:
+        "Failed to fetch alerts",
     });
   }
 });
@@ -820,32 +1147,47 @@ app.get("/api/alerts", async (req, res) => {
 
 app.put(
   "/api/alerts/:id/resolve",
+
   async (req, res) => {
     try {
-      const { id } = req.params;
+      const alertId =
+        req.params.id;
 
-      const result = await pool.query(
-        `
-        UPDATE alerts
-        SET
-          is_resolved = TRUE,
-          resolved_at = CURRENT_TIMESTAMP
-        WHERE id = $1
-        RETURNING *
-        `,
-        [id]
-      );
+      const result =
+        await pool.query(
+          `
+          UPDATE alerts
+          SET
+            is_resolved = TRUE,
+            resolved_at =
+              CURRENT_TIMESTAMP,
+            escalation_status =
+              'RESOLVED'
+          WHERE id = $1
+          RETURNING *
+          `,
+          [alertId]
+        );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          error: "Alert not found",
-        });
+      if (
+        result.rows.length === 0
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Alert not found",
+          });
       }
 
       res.json({
+        success: true,
+
         message:
           "Alert resolved successfully",
-        alert: result.rows[0],
+
+        alert:
+          result.rows[0],
       });
     } catch (error) {
       console.error(
@@ -854,48 +1196,112 @@ app.put(
       );
 
       res.status(500).json({
-        error: "Failed to resolve alert",
+        error:
+          "Failed to resolve alert",
       });
     }
   }
 );
 
 // ==========================================
-// GET NOTIFICATION ROUTES
+// ADD KPI READING
 // ==========================================
 
-app.get(
-  "/api/notification-routes",
+app.post(
+  "/api/kpis/:id/readings",
+
   async (req, res) => {
     try {
-      const result = await pool.query(`
-        SELECT
-          nr.id,
-          nr.department_id,
-          d.name AS department,
-          nr.severity,
-          nr.channel,
-          nr.recipient,
-          nr.is_active,
-          nr.created_at
-        FROM notification_routes nr
-        JOIN departments d
-          ON nr.department_id = d.id
-        ORDER BY
-          d.name,
-          nr.severity
-      `);
+      const kpiId =
+        req.params.id;
 
-      res.json(result.rows);
+      const {
+        value,
+        source,
+      } = req.body;
+
+      if (
+        value === undefined ||
+        value === null
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "KPI value is required",
+          });
+      }
+
+      const kpiResult =
+        await pool.query(
+          `
+          SELECT
+            id,
+            name
+          FROM kpis
+          WHERE id = $1
+          `,
+          [kpiId]
+        );
+
+      if (
+        kpiResult.rows.length === 0
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "KPI not found",
+          });
+      }
+
+      const readingResult =
+        await pool.query(
+          `
+          INSERT INTO kpi_readings
+          (
+            kpi_id,
+            value,
+            source
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3
+          )
+          RETURNING *
+          `,
+          [
+            kpiId,
+            value,
+            source ||
+              "Manual Entry",
+          ]
+        );
+
+      console.log(
+        `New KPI reading added: ${kpiResult.rows[0].name} = ${value}`
+      );
+
+      res.status(201).json({
+        success: true,
+
+        message:
+          "KPI value updated successfully",
+
+        reading:
+          readingResult.rows[0],
+      });
     } catch (error) {
       console.error(
-        "Error fetching notification routes:",
+        "Error adding KPI reading:",
         error
       );
 
       res.status(500).json({
         error:
-          "Failed to fetch notification routes",
+          "Failed to add KPI reading",
       });
     }
   }
@@ -907,46 +1313,33 @@ app.get(
 
 app.get(
   "/api/notification-logs",
+
   async (req, res) => {
     try {
-      const result = await pool.query(`
-        SELECT
-          nl.id,
-          nl.alert_id,
-          nl.recipient,
-          nl.channel,
-          nl.status,
-          nl.error_message,
-          nl.sent_at,
-
-          nl.retry_count,
-          nl.max_retries,
-          nl.next_retry_at,
-          nl.last_retry_at,
-          nl.escalation_level,
-
-          a.status AS alert_status,
-          a.message AS alert_message,
-          a.escalation_status AS alert_escalation_status,
-          a.escalation_level AS alert_escalation_level,
-          a.last_escalated_at,
-
-          k.name AS kpi_name,
-          d.name AS department
-
-        FROM notification_logs nl
-
-        LEFT JOIN alerts a
-          ON nl.alert_id = a.id
-
-        LEFT JOIN kpis k
-          ON a.kpi_id = k.id
-
-        LEFT JOIN departments d
-          ON k.department_id = d.id
-
-        ORDER BY nl.sent_at DESC
-      `);
+      const result =
+        await pool.query(`
+          SELECT
+            nl.id,
+            nl.alert_id,
+            nl.recipient,
+            nl.channel,
+            nl.status,
+            nl.error_message,
+            nl.retry_count,
+            nl.max_retries,
+            nl.next_retry_at,
+            nl.last_retry_at,
+            nl.escalation_level,
+            nl.sent_at,
+            a.status AS alert_status,
+            k.name AS kpi_name
+          FROM notification_logs nl
+          LEFT JOIN alerts a
+            ON nl.alert_id = a.id
+          LEFT JOIN kpis k
+            ON a.kpi_id = k.id
+          ORDER BY nl.sent_at DESC
+        `);
 
       res.json(result.rows);
     } catch (error) {
@@ -964,35 +1357,74 @@ app.get(
 );
 
 // ==========================================
-// TEST EMAIL
+// GET DEPARTMENTS
 // ==========================================
 
-app.post(
-  "/api/test-email",
+app.get(
+  "/api/departments",
+
   async (req, res) => {
     try {
-      await sendEmail(
-        process.env.EMAIL_USER,
-        "AI Notification Manager - Test Email",
-        "Success! Your AI Notification Manager email notification system is working correctly."
-      );
+      const result =
+        await pool.query(`
+          SELECT
+            id,
+            name
+          FROM departments
+          ORDER BY id
+        `);
 
-      res.json({
-        success: true,
-        message:
-          "Test email sent successfully",
-      });
+      res.json(result.rows);
     } catch (error) {
       console.error(
-        "Test email error:",
+        "Error fetching departments:",
         error
       );
 
       res.status(500).json({
-        success: false,
-        message:
-          "Failed to send test email",
-        error: error.message,
+        error:
+          "Failed to fetch departments",
+      });
+    }
+  }
+);
+
+// ==========================================
+// GET NOTIFICATION ROUTES
+// ==========================================
+
+app.get(
+  "/api/notification-routes",
+
+  async (req, res) => {
+    try {
+      const result =
+        await pool.query(`
+          SELECT
+            nr.id,
+            nr.department_id,
+            d.name AS department,
+            nr.severity,
+            nr.recipient,
+            nr.channel,
+            nr.is_active,
+            nr.created_at
+          FROM notification_routes nr
+          JOIN departments d
+            ON nr.department_id = d.id
+          ORDER BY nr.id
+        `);
+
+      res.json(result.rows);
+    } catch (error) {
+      console.error(
+        "Error fetching notification routes:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          "Failed to fetch notification routes",
       });
     }
   }
@@ -1004,89 +1436,66 @@ app.post(
 
 app.post(
   "/api/notification-routes",
+
   async (req, res) => {
     try {
       const {
         department_id,
         severity,
-        channel,
         recipient,
+        channel,
       } = req.body;
 
       if (
         !department_id ||
         !severity ||
-        !channel ||
         !recipient
       ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "All fields are required",
-        });
+        return res
+          .status(400)
+          .json({
+            error:
+              "Department, severity and recipient are required",
+          });
       }
 
-      const allowedSeverities = [
-        "WARNING",
-        "CRITICAL",
-      ];
-
-      if (
-        !allowedSeverities.includes(
-          severity
-        )
-      ) {
-        return res.status(400).json({
-          success: false,
-          message: "Invalid severity",
-        });
-      }
-
-      if (channel !== "EMAIL") {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Only EMAIL channel is currently supported",
-        });
-      }
-
-      const result = await pool.query(
-        `
-        INSERT INTO notification_routes
-        (
-          department_id,
-          severity,
-          channel,
-          recipient,
-          is_active
-        )
-        VALUES
-        (
-          $1,
-          $2,
-          $3,
-          $4,
-          TRUE
-        )
-        RETURNING *
-        `,
-        [
-          department_id,
-          severity,
-          channel,
-          recipient,
-        ]
-      );
-
-      console.log(
-        `New notification route created for ${recipient}`
-      );
+      const result =
+        await pool.query(
+          `
+          INSERT INTO notification_routes
+          (
+            department_id,
+            severity,
+            recipient,
+            channel,
+            is_active
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            TRUE
+          )
+          RETURNING *
+          `,
+          [
+            department_id,
+            severity,
+            recipient,
+            channel || "EMAIL",
+          ]
+        );
 
       res.status(201).json({
         success: true,
+
         message:
           "Notification route created successfully",
-        route: result.rows[0],
+
+        route:
+          result.rows[0],
       });
     } catch (error) {
       console.error(
@@ -1095,67 +1504,66 @@ app.post(
       );
 
       res.status(500).json({
-        success: false,
-        message:
+        error:
           "Failed to create notification route",
-        error: error.message,
       });
     }
   }
 );
 
 // ==========================================
-// UPDATE NOTIFICATION ROUTE STATUS
+// TOGGLE NOTIFICATION ROUTE
 // ==========================================
 
 app.put(
   "/api/notification-routes/:id/toggle",
+
   async (req, res) => {
     try {
-      const { id } = req.params;
+      const routeId =
+        req.params.id;
 
-      const result = await pool.query(
-        `
-        UPDATE notification_routes
-        SET
-          is_active = NOT is_active
-        WHERE id = $1
-        RETURNING *
-        `,
-        [id]
-      );
+      const result =
+        await pool.query(
+          `
+          UPDATE notification_routes
+          SET
+            is_active =
+              NOT is_active
+          WHERE id = $1
+          RETURNING *
+          `,
+          [routeId]
+        );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Notification route not found",
-        });
+      if (
+        result.rows.length === 0
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Notification route not found",
+          });
       }
-
-      console.log(
-        `Notification route ${id} status changed to ${
-          result.rows[0].is_active
-            ? "ACTIVE"
-            : "INACTIVE"
-        }`
-      );
 
       res.json({
         success: true,
+
         message:
           "Notification route status updated",
-        route: result.rows[0],
+
+        route:
+          result.rows[0],
       });
     } catch (error) {
       console.error(
-        "Error updating notification route:",
+        "Error toggling notification route:",
         error
       );
 
       res.status(500).json({
-        success: false,
-        message:
+        error:
           "Failed to update notification route",
       });
     }
@@ -1168,33 +1576,36 @@ app.put(
 
 app.delete(
   "/api/notification-routes/:id",
+
   async (req, res) => {
     try {
-      const { id } = req.params;
+      const routeId =
+        req.params.id;
 
-      const result = await pool.query(
-        `
-        DELETE FROM notification_routes
-        WHERE id = $1
-        RETURNING *
-        `,
-        [id]
-      );
+      const result =
+        await pool.query(
+          `
+          DELETE FROM notification_routes
+          WHERE id = $1
+          RETURNING *
+          `,
+          [routeId]
+        );
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message:
-            "Notification route not found",
-        });
+      if (
+        result.rows.length === 0
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Notification route not found",
+          });
       }
-
-      console.log(
-        `Notification route ${id} deleted`
-      );
 
       res.json({
         success: true,
+
         message:
           "Notification route deleted successfully",
       });
@@ -1205,8 +1616,7 @@ app.delete(
       );
 
       res.status(500).json({
-        success: false,
-        message:
+        error:
           "Failed to delete notification route",
       });
     }
@@ -1214,21 +1624,302 @@ app.delete(
 );
 
 // ==========================================
-// START SERVER
+// GET ESCALATION RULES
 // ==========================================
 
-const PORT = process.env.PORT || 5000;
+app.get(
+  "/api/escalation-rules",
 
-app.listen(PORT, () => {
-  console.log(
-    `Server running on port ${PORT}`
-  );
+  async (req, res) => {
+    try {
+      const result =
+        await pool.query(`
+          SELECT
+            er.id,
+            er.department_id,
+            d.name AS department,
+            er.severity,
+            er.escalation_level,
+            er.recipient,
+            er.channel,
+            er.escalate_after_minutes,
+            er.is_active,
+            er.created_at
+          FROM escalation_rules er
+          JOIN departments d
+            ON er.department_id = d.id
+          ORDER BY
+            er.department_id,
+            er.severity,
+            er.escalation_level
+        `);
 
-  console.log(
-    `Email retry system enabled: maximum ${MAX_EMAIL_RETRIES} retries`
-  );
+      res.json(result.rows);
+    } catch (error) {
+      console.error(
+        "Error fetching escalation rules:",
+        error
+      );
 
-  console.log(
-    "Automatic escalation system enabled"
-  );
-});
+      res.status(500).json({
+        error:
+          "Failed to fetch escalation rules",
+      });
+    }
+  }
+);
+
+// ==========================================
+// CREATE ESCALATION RULE
+// ==========================================
+
+app.post(
+  "/api/escalation-rules",
+
+  async (req, res) => {
+    try {
+      const {
+        department_id,
+        severity,
+        escalation_level,
+        recipient,
+        channel,
+        escalate_after_minutes,
+      } = req.body;
+
+      if (
+        !department_id ||
+        !severity ||
+        !escalation_level ||
+        !recipient
+      ) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Department, severity, escalation level and recipient are required",
+          });
+      }
+
+      const result =
+        await pool.query(
+          `
+          INSERT INTO escalation_rules
+          (
+            department_id,
+            severity,
+            escalation_level,
+            recipient,
+            channel,
+            escalate_after_minutes,
+            is_active
+          )
+          VALUES
+          (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            TRUE
+          )
+          RETURNING *
+          `,
+          [
+            department_id,
+            severity,
+            escalation_level,
+            recipient,
+            channel || "EMAIL",
+            escalate_after_minutes ||
+              15,
+          ]
+        );
+
+      res.status(201).json({
+        success: true,
+
+        message:
+          "Escalation rule created successfully",
+
+        rule:
+          result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Error creating escalation rule:",
+        error
+      );
+
+      if (
+        error.code === "23505"
+      ) {
+        return res
+          .status(409)
+          .json({
+            error:
+              "An escalation rule already exists for this department, severity and level",
+          });
+      }
+
+      res.status(500).json({
+        error:
+          "Failed to create escalation rule",
+      });
+    }
+  }
+);
+
+// ==========================================
+// TOGGLE ESCALATION RULE
+// ==========================================
+
+app.put(
+  "/api/escalation-rules/:id/toggle",
+
+  async (req, res) => {
+    try {
+      const ruleId =
+        req.params.id;
+
+      const result =
+        await pool.query(
+          `
+          UPDATE escalation_rules
+          SET
+            is_active =
+              NOT is_active
+          WHERE id = $1
+          RETURNING *
+          `,
+          [ruleId]
+        );
+
+      if (
+        result.rows.length === 0
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Escalation rule not found",
+          });
+      }
+
+      res.json({
+        success: true,
+
+        message:
+          "Escalation rule status updated",
+
+        rule:
+          result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Error toggling escalation rule:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          "Failed to update escalation rule",
+      });
+    }
+  }
+);
+
+// ==========================================
+// DELETE ESCALATION RULE
+// ==========================================
+
+app.delete(
+  "/api/escalation-rules/:id",
+
+  async (req, res) => {
+    try {
+      const ruleId =
+        req.params.id;
+
+      const result =
+        await pool.query(
+          `
+          DELETE FROM escalation_rules
+          WHERE id = $1
+          RETURNING *
+          `,
+          [ruleId]
+        );
+
+      if (
+        result.rows.length === 0
+      ) {
+        return res
+          .status(404)
+          .json({
+            error:
+              "Escalation rule not found",
+          });
+      }
+
+      res.json({
+        success: true,
+
+        message:
+          "Escalation rule deleted successfully",
+      });
+    } catch (error) {
+      console.error(
+        "Error deleting escalation rule:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          "Failed to delete escalation rule",
+      });
+    }
+  }
+);
+
+// ==========================================
+// AUTOMATIC ESCALATION CHECKER
+// ==========================================
+
+setInterval(
+  async () => {
+    await processTimedEscalations();
+  },
+  60 * 1000
+);
+
+// ==========================================
+// SERVER
+// ==========================================
+
+const PORT =
+  process.env.PORT || 5000;
+
+app.listen(
+  PORT,
+  "0.0.0.0",
+
+  () => {
+    console.log(
+      `Server running on port ${PORT}`
+    );
+
+    console.log(
+      `Email retry system enabled: maximum ${MAX_EMAIL_RETRIES} retries`
+    );
+
+    console.log(
+      "Multi-level automatic escalation system enabled"
+    );
+
+    console.log(
+      "Escalation checker running every 1 minute"
+    );
+  }
+);
