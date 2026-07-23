@@ -223,52 +223,99 @@ function App() {
   };
 
   // ==========================================
-  // RESOLVE ALERT
-  // ==========================================
-  const resolveAlert = async (id) => {
-    try {
-      const response = await fetch(
-        `${API_URL}/api/alerts/${id}/resolve`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+// RESOLVE ALERT
+// ==========================================
+const resolveAlert = async (id) => {
+  try {
+    const resolvedBy = prompt(
+      "Enter the name of the person resolving this alert:",
+      "Rahul"
+    );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          data.message ||
-            data.error ||
-            "Failed to resolve alert"
-        );
-      }
-
-      setAlerts((previousAlerts) =>
-        previousAlerts.map((alert) =>
-          Number(alert.id) === Number(id)
-            ? {
-                ...alert,
-                is_resolved: true,
-                resolved_at:
-                  data.alert?.resolved_at ||
-                  new Date().toISOString(),
-              }
-            : alert
-        )
-      );
-
-      setSelectedAlertId(id);
-
-      console.log(`Alert #${id} resolved successfully`);
-    } catch (error) {
-      console.error("Error resolving alert:", error);
-      alert(error.message);
+    // User cancelled the resolution
+    if (resolvedBy === null) {
+      return;
     }
-  };
+
+    if (!resolvedBy.trim()) {
+      alert("Resolved By is required.");
+      return;
+    }
+
+   const resolutionNote = prompt(
+  "Enter the resolution note:",
+  ""
+);
+
+// User cancelled the resolution
+if (resolutionNote === null) {
+  return;
+}
+
+// Resolution note cannot be empty
+if (!resolutionNote.trim()) {
+  alert("Resolution Note is required.");
+  return;
+}
+
+   const response = await fetch(
+  `${API_URL}/api/alerts/${id}/resolve`,
+  {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      resolved_by: resolvedBy.trim(),
+      resolution_note: resolutionNote.trim(),
+    }),
+  }
+);
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(
+        data.message ||
+          data.error ||
+          "Failed to resolve alert"
+      );
+    }
+
+    setAlerts((previousAlerts) =>
+      previousAlerts.map((alert) =>
+        Number(alert.id) === Number(id)
+          ? {
+              ...alert,
+              ...data.alert,
+              is_resolved: true,
+              resolved_at:
+                data.alert?.resolved_at ||
+                new Date().toISOString(),
+              resolved_by:
+                data.alert?.resolved_by ||
+                resolvedBy.trim(),
+              resolution_note:
+                data.alert?.resolution_note ||
+                resolutionNote.trim() ||
+                null,
+            }
+          : alert
+      )
+    );
+
+    setSelectedAlertId(id);
+
+    console.log(
+      `Alert #${id} resolved successfully by ${resolvedBy.trim()}`
+    );
+  } catch (error) {
+    console.error(
+      "Error resolving alert:",
+      error
+    );
+    alert(error.message);
+  }
+};
 
   // ==========================================
   // CREATE NOTIFICATION ROUTE
@@ -1909,16 +1956,17 @@ function AlertDetail({
               </button>
             )}
 
-          {!alert.is_resolved && (
-            <button
-              className="resolve-button"
-              onClick={() =>
-                onResolve(alert.id)
-              }
-            >
-              Resolve Alert
-            </button>
-          )}
+         {!alert.is_resolved &&
+  alert.is_acknowledged && (
+    <button
+      className="resolve-button"
+      onClick={() =>
+        onResolve(alert.id)
+      }
+    >
+      Resolve Alert
+    </button>
+  )}
         </div>
       </div>
 
@@ -1995,6 +2043,36 @@ function AlertDetail({
                   alert.acknowledged_at
                 )
               : "-"}
+          </strong>
+        </div>
+
+        {/* RESOLUTION AUDIT TRAIL */}
+
+        <div>
+          <span>Resolved By</span>
+
+          <strong>
+            {alert.resolved_by || "-"}
+          </strong>
+        </div>
+
+        <div>
+          <span>Resolved At</span>
+
+          <strong>
+            {alert.resolved_at
+              ? formatDate(
+                  alert.resolved_at
+                )
+              : "-"}
+          </strong>
+        </div>
+
+        <div>
+          <span>Resolution Note</span>
+
+          <strong>
+            {alert.resolution_note || "-"}
           </strong>
         </div>
       </div>

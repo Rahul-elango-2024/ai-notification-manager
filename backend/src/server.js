@@ -1100,6 +1100,8 @@ app.get("/api/alerts", async (req, res) => {
         a.ai_generated_at,
         a.is_resolved,
         a.resolved_at,
+        a.resolved_by,
+        a.resolution_note,
         a.escalation_level,
         a.escalation_status,
         a.last_escalated_at,
@@ -1127,7 +1129,6 @@ app.get("/api/alerts", async (req, res) => {
     });
   }
 });
-
 // ==========================================
 // GET SINGLE ALERT
 // ==========================================
@@ -1268,41 +1269,47 @@ app.put(
         resolution_note,
       } = req.body;
 
-      // Validate who resolved the alert
+      // Validate resolved by
       if (
         !resolved_by ||
         !resolved_by.trim()
       ) {
         return res.status(400).json({
-          error:
-            "resolved_by is required",
+          error: "Resolved By is required",
         });
       }
 
-      const result =
-        await pool.query(
-          `
-          UPDATE alerts
-          SET
-            is_resolved = TRUE,
-            resolved_at = CURRENT_TIMESTAMP,
-            resolved_by = $2,
-            resolution_note = $3,
-            escalation_status = 'RESOLVED'
-          WHERE id = $1
-            AND is_resolved = FALSE
-          RETURNING *
-          `,
-          [
-            alertId,
-            resolved_by.trim(),
-            resolution_note?.trim() || null,
-          ]
-        );
-
+      // Validate resolution note
       if (
-        result.rows.length === 0
+        !resolution_note ||
+        !resolution_note.trim()
       ) {
+        return res.status(400).json({
+          error: "Resolution Note is required",
+        });
+      }
+
+      const result = await pool.query(
+        `
+        UPDATE alerts
+        SET
+          is_resolved = TRUE,
+          resolved_at = CURRENT_TIMESTAMP,
+          resolved_by = $2,
+          resolution_note = $3,
+          escalation_status = 'RESOLVED'
+        WHERE id = $1
+          AND is_resolved = FALSE
+        RETURNING *
+        `,
+        [
+          alertId,
+          resolved_by.trim(),
+          resolution_note.trim(),
+        ]
+      );
+
+      if (result.rows.length === 0) {
         return res.status(404).json({
           error:
             "Alert not found or already resolved",
@@ -1332,7 +1339,6 @@ app.put(
     }
   }
 );
-
 // ==========================================
 // ADD NEW KPI READING
 // ==========================================
@@ -1465,7 +1471,7 @@ app.get(
             ON a.kpi_id = k.id
           JOIN departments d
             ON k.department_id = d.id
-          ORDER BY nl.created_at DESC
+          ORDER BY nl.sent_at DESC
         `);
 
       res.json(result.rows);
