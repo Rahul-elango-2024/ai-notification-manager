@@ -1173,116 +1173,132 @@ if (!resolutionNote.trim()) {
       </div>
     </>
   );
-    // ==========================================
-  // NOTIFICATIONS PAGE
   // ==========================================
-  const renderNotifications = () => (
-    <>
-      <PageHeader
-        eyebrow="DELIVERY & AUDIT"
-        title="Notification History"
-        description="Track successful and failed enterprise alert deliveries."
+// NOTIFICATIONS PAGE
+// ==========================================
+const renderNotifications = () => (
+  <>
+    <PageHeader
+      eyebrow="DELIVERY & AUDIT"
+      title="Notification History"
+      description="Track successful and failed enterprise alert deliveries."
+    />
+
+    <section className="metric-grid compact-metrics">
+      <MetricCard
+        label="Total Attempts"
+        value={notificationLogs.length}
+        icon="✉"
+        tone="blue"
+        description="Notification records"
       />
 
-      <section className="metric-grid compact-metrics">
-        <MetricCard
-          label="Total Attempts"
-          value={notificationLogs.length}
-          icon="✉"
-          tone="blue"
-          description="Notification records"
-        />
+      <MetricCard
+        label="Successfully Sent"
+        value={successfulNotifications}
+        icon="✓"
+        tone="green"
+        description="Delivered successfully"
+      />
 
-        <MetricCard
-          label="Successfully Sent"
-          value={successfulNotifications}
-          icon="✓"
-          tone="green"
-          description="Delivered successfully"
-        />
+      <MetricCard
+        label="Failed"
+        value={failedNotifications}
+        icon="!"
+        tone="red"
+        description="Requires review"
+      />
+    </section>
 
-        <MetricCard
-          label="Failed"
-          value={failedNotifications}
-          icon="!"
-          tone="red"
-          description="Requires review"
-        />
-      </section>
-
-      <div className="panel">
-        <div className="panel-header">
-          <div>
-            <h2>Delivery Log</h2>
-            <p>Full notification audit history.</p>
-          </div>
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <h2>Delivery Log</h2>
+          <p>Full notification audit history.</p>
         </div>
-
-        {notificationLogs.length === 0 ? (
-          <EmptyState
-            title="No notification history"
-            description="Notification attempts will be recorded here."
-          />
-        ) : (
-          <div className="data-table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Alert</th>
-                  <th>Recipient</th>
-                  <th>Channel</th>
-                  <th>Status</th>
-                  <th>Time</th>
-                  <th>Details</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {notificationLogs.map((log) => (
-                  <tr key={log.id}>
-                    <td>#{log.id}</td>
-                    <td>#{log.alert_id || "-"}</td>
-
-                    <td>
-                      <div className="table-primary">
-                        {log.recipient}
-                      </div>
-                    </td>
-
-                    <td>{log.channel}</td>
-
-                    <td>
-                      <span
-                        className={`delivery-badge ${log.status.toLowerCase()}`}
-                      >
-                        {log.status}
-                      </span>
-                    </td>
-
-                    <td>{formatDate(log.sent_at)}</td>
-
-                    <td
-                      className="error-cell"
-                      title={
-                        log.error_message ||
-                        "No errors"
-                      }
-                    >
-                      {log.error_message
-                        ? log.error_message
-                        : "Delivered successfully"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
-    </>
-  );
 
+      {notificationLogs.length === 0 ? (
+        <EmptyState
+          title="No notification history"
+          description="Notification attempts will be recorded here."
+        />
+      ) : (
+        <div className="data-table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Alert</th>
+                <th>Recipient</th>
+                <th>Channel</th>
+                <th>Status</th>
+                <th>Retries</th>
+                <th>Escalation</th>
+                <th>Time</th>
+                <th>Details</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {notificationLogs.map((log) => (
+                <tr key={log.id}>
+                  <td>#{log.id}</td>
+
+                  <td>
+                    #{log.alert_id || "-"}
+                  </td>
+
+                  <td>
+                    <div className="table-primary">
+                      {log.recipient}
+                    </div>
+                  </td>
+
+                  <td>{log.channel}</td>
+
+                  <td>
+                    <span
+                      className={`delivery-badge ${log.status.toLowerCase()}`}
+                    >
+                      {log.status}
+                    </span>
+                  </td>
+
+                  <td>
+                    {log.retry_count ?? 0} /{" "}
+                    {log.max_retries ?? 3}
+                  </td>
+
+                  <td>
+                    Level{" "}
+                    {log.escalation_level ?? 0}
+                  </td>
+
+                  <td>
+                    {formatDate(log.sent_at)}
+                  </td>
+
+                  <td
+                    className="error-cell"
+                    title={
+                      log.error_message ||
+                      "No errors"
+                    }
+                  >
+                    {log.error_message
+                      ? log.error_message
+                      : "Delivered successfully"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  </>
+);
   // ==========================================
   // ROUTING PAGE
   // ==========================================
