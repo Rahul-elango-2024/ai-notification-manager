@@ -109,12 +109,13 @@ async function startEscalation({
 
     const rule = ruleResult.rows[0];
 
-    // Make sure the alert still exists and is unresolved.
+    // Make sure the alert still exists and is unresolved/unacknowledged.
     const alertResult = await pool.query(
       `
       SELECT
         id,
         is_resolved,
+        is_acknowledged,
         escalation_level
       FROM alerts
       WHERE id = $1
@@ -124,10 +125,7 @@ async function startEscalation({
     );
 
     if (alertResult.rows.length === 0) {
-      console.log(
-        `Alert #${alertId} does not exist`
-      );
-
+      console.log(`Alert #${alertId} does not exist`);
       return;
     }
 
@@ -137,7 +135,13 @@ async function startEscalation({
       console.log(
         `Alert #${alertId} is already resolved. Escalation cancelled.`
       );
+      return;
+    }
 
+    if (alert.is_acknowledged) {
+      console.log(
+        `Alert #${alertId} is acknowledged. Escalation cancelled.`
+      );
       return;
     }
 
@@ -148,11 +152,10 @@ async function startEscalation({
       console.log(
         `Alert #${alertId} is already at escalation Level ${alert.escalation_level}`
       );
-
       return;
     }
 
-    // Update the alert to Level 1.
+    // Update the alert to the first escalation level.
     const escalatedAlert = await pool.query(
       `
       UPDATE alerts
@@ -162,6 +165,7 @@ async function startEscalation({
         last_escalated_at = CURRENT_TIMESTAMP
       WHERE id = $2
         AND is_resolved = FALSE
+        AND is_acknowledged = FALSE
         AND COALESCE(escalation_level, 0) < $1
       RETURNING *
       `,
@@ -173,9 +177,8 @@ async function startEscalation({
 
     if (escalatedAlert.rows.length === 0) {
       console.log(
-        `Alert #${alertId} was not escalated because it was already escalated or resolved`
+        `Alert #${alertId} was not escalated because its state changed`
       );
-
       return;
     }
 
@@ -205,7 +208,7 @@ async function startEscalation({
     );
 
     console.log(
-      `Escalation Status: ESCALATED`
+      "Escalation Status: ESCALATED"
     );
 
     console.log(
@@ -257,6 +260,7 @@ async function processTimedEscalations() {
         ON k.department_id = d.id
 
       WHERE a.is_resolved = FALSE
+        AND a.is_acknowledged = FALSE
         AND COALESCE(a.escalation_level, 0) > 0
 
       ORDER BY a.created_at ASC
@@ -303,14 +307,6 @@ async function processTimedEscalations() {
       // ==========================================
       // POSTGRESQL-BASED TIME CHECK
       // ==========================================
-      //
-      // PostgreSQL calculates whether the escalation
-      // is due instead of Node.js.
-      //
-      // This prevents timezone differences between
-      // JavaScript Date and PostgreSQL timestamps
-      // from blocking Level 2 -> Level 3 escalation.
-      // ==========================================
 
       const dueResult = await pool.query(
         `
@@ -342,13 +338,6 @@ async function processTimedEscalations() {
       // ==========================================
       // ATOMIC ESCALATION UPDATE
       // ==========================================
-      //
-      // The current escalation level must still
-      // match the level that we originally read.
-      //
-      // This prevents duplicate escalation when
-      // multiple checker executions overlap.
-      // ==========================================
 
       const updateResult = await pool.query(
         `
@@ -359,6 +348,7 @@ async function processTimedEscalations() {
           last_escalated_at = CURRENT_TIMESTAMP
         WHERE id = $2
           AND is_resolved = FALSE
+          AND is_acknowledged = FALSE
           AND COALESCE(escalation_level, 0) = $3
         RETURNING *
         `,
@@ -373,7 +363,6 @@ async function processTimedEscalations() {
         console.log(
           `Alert #${alert.id}: escalation skipped because its state changed`
         );
-
         continue;
       }
 
@@ -390,7 +379,6 @@ async function processTimedEscalations() {
         console.log(
           `Unsupported escalation channel: ${nextRule.channel}`
         );
-
         continue;
       }
 
@@ -777,7 +765,6 @@ app.get("/api/monitoring", async (req, res) => {
         console.log(
           `Duplicate active ${kpi.status} alert prevented for ${kpi.kpi_name}`
         );
-
         continue;
       }
 
@@ -799,7 +786,8 @@ app.get("/api/monitoring", async (req, res) => {
       console.log(
         `Deviation: ${aiAnalysis.deviationText}`
       );
-            // ==========================================
+
+      // ==========================================
       // SMART ROUTING
       // ==========================================
 
@@ -830,7 +818,6 @@ app.get("/api/monitoring", async (req, res) => {
         console.log(
           `No active email notification route found for ${kpi.department} - ${kpi.status}`
         );
-
         continue;
       }
 
@@ -1087,45 +1074,46 @@ by the AI Notification Manager.
     });
   }
 });
-
 // ==========================================
 // GET ALL ALERTS
 // ==========================================
 
 app.get("/api/alerts", async (req, res) => {
   try {
-    const result =
-      await pool.query(`
-        SELECT
-          a.id,
-          a.kpi_id,
-          k.name AS kpi_name,
-          d.name AS department,
-          a.status,
-          a.message,
-          a.current_value,
-          a.risk_score,
-          a.risk_level,
-          a.deviation_percentage,
-          a.deviation_direction,
-          a.impact_summary,
-          a.possible_causes,
-          a.recommended_actions,
-          a.ai_timeline,
-          a.ai_generated_at,
-          a.escalation_level,
-          a.escalation_status,
-          a.last_escalated_at,
-          a.is_resolved,
-          a.resolved_at,
-          a.created_at
-        FROM alerts a
-        JOIN kpis k
-          ON a.kpi_id = k.id
-        JOIN departments d
-          ON k.department_id = d.id
-        ORDER BY a.created_at DESC
-      `);
+    const result = await pool.query(`
+      SELECT
+        a.id,
+        a.kpi_id,
+        k.name AS kpi_name,
+        d.name AS department,
+        a.status,
+        a.message,
+        a.current_value,
+        a.risk_score,
+        a.risk_level,
+        a.deviation_percentage,
+        a.deviation_direction,
+        a.impact_summary,
+        a.possible_causes,
+        a.recommended_actions,
+        a.ai_timeline,
+        a.ai_generated_at,
+        a.is_resolved,
+        a.resolved_at,
+        a.escalation_level,
+        a.escalation_status,
+        a.last_escalated_at,
+        a.is_acknowledged,
+        a.acknowledged_by,
+        a.acknowledged_at,
+        a.created_at
+      FROM alerts a
+      JOIN kpis k
+        ON a.kpi_id = k.id
+      JOIN departments d
+        ON k.department_id = d.id
+      ORDER BY a.created_at DESC
+    `);
 
     res.json(result.rows);
   } catch (error) {
@@ -1135,11 +1123,135 @@ app.get("/api/alerts", async (req, res) => {
     );
 
     res.status(500).json({
-      error:
-        "Failed to fetch alerts",
+      error: "Failed to fetch alerts",
     });
   }
 });
+
+// ==========================================
+// GET SINGLE ALERT
+// ==========================================
+
+app.get("/api/alerts/:id", async (req, res) => {
+  try {
+    const alertId = req.params.id;
+
+    const result = await pool.query(
+      `
+      SELECT
+        a.*,
+        k.name AS kpi_name,
+        k.unit,
+        k.target_value,
+        k.warning_threshold,
+        k.critical_threshold,
+        d.name AS department
+      FROM alerts a
+      JOIN kpis k
+        ON a.kpi_id = k.id
+      JOIN departments d
+        ON k.department_id = d.id
+      WHERE a.id = $1
+      LIMIT 1
+      `,
+      [alertId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Alert not found",
+      });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(
+      "Error fetching alert:",
+      error
+    );
+
+    res.status(500).json({
+      error: "Failed to fetch alert",
+    });
+  }
+});
+
+// ==========================================
+// ACKNOWLEDGE ALERT
+// ==========================================
+
+app.put(
+  "/api/alerts/:id/acknowledge",
+  async (req, res) => {
+    try {
+      const alertId = req.params.id;
+
+      const {
+        acknowledged_by,
+      } = req.body;
+
+      if (
+        !acknowledged_by ||
+        !acknowledged_by.trim()
+      ) {
+        return res.status(400).json({
+          error:
+            "acknowledged_by is required",
+        });
+      }
+
+      const result =
+        await pool.query(
+          `
+          UPDATE alerts
+          SET
+            is_acknowledged = TRUE,
+            acknowledged_by = $1,
+            acknowledged_at = CURRENT_TIMESTAMP,
+            escalation_status = 'ACKNOWLEDGED'
+          WHERE id = $2
+            AND is_resolved = FALSE
+            AND is_acknowledged = FALSE
+          RETURNING *
+          `,
+          [
+            acknowledged_by.trim(),
+            alertId,
+          ]
+        );
+
+      if (
+        result.rows.length === 0
+      ) {
+        return res.status(404).json({
+          error:
+            "Alert not found, already acknowledged, or already resolved",
+        });
+      }
+
+      console.log(
+        `Alert #${alertId} acknowledged by ${acknowledged_by.trim()}`
+      );
+
+      res.json({
+        success: true,
+        message:
+          "Alert acknowledged successfully",
+        alert: result.rows[0],
+      });
+    } catch (error) {
+      console.error(
+        "Error acknowledging alert:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          "Failed to acknowledge alert",
+      });
+    }
+  }
+);
 
 // ==========================================
 // RESOLVE ALERT
@@ -1147,11 +1259,25 @@ app.get("/api/alerts", async (req, res) => {
 
 app.put(
   "/api/alerts/:id/resolve",
-
   async (req, res) => {
     try {
-      const alertId =
-        req.params.id;
+      const alertId = req.params.id;
+
+      const {
+        resolved_by,
+        resolution_note,
+      } = req.body;
+
+      // Validate who resolved the alert
+      if (
+        !resolved_by ||
+        !resolved_by.trim()
+      ) {
+        return res.status(400).json({
+          error:
+            "resolved_by is required",
+        });
+      }
 
       const result =
         await pool.query(
@@ -1159,35 +1285,39 @@ app.put(
           UPDATE alerts
           SET
             is_resolved = TRUE,
-            resolved_at =
-              CURRENT_TIMESTAMP,
-            escalation_status =
-              'RESOLVED'
+            resolved_at = CURRENT_TIMESTAMP,
+            resolved_by = $2,
+            resolution_note = $3,
+            escalation_status = 'RESOLVED'
           WHERE id = $1
+            AND is_resolved = FALSE
           RETURNING *
           `,
-          [alertId]
+          [
+            alertId,
+            resolved_by.trim(),
+            resolution_note?.trim() || null,
+          ]
         );
 
       if (
         result.rows.length === 0
       ) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "Alert not found",
-          });
+        return res.status(404).json({
+          error:
+            "Alert not found or already resolved",
+        });
       }
+
+      console.log(
+        `Alert #${alertId} resolved by ${resolved_by.trim()}`
+      );
 
       res.json({
         success: true,
-
         message:
           "Alert resolved successfully",
-
-        alert:
-          result.rows[0],
+        alert: result.rows[0],
       });
     } catch (error) {
       console.error(
@@ -1204,12 +1334,11 @@ app.put(
 );
 
 // ==========================================
-// ADD KPI READING
+// ADD NEW KPI READING
 // ==========================================
 
 app.post(
   "/api/kpis/:id/readings",
-
   async (req, res) => {
     try {
       const kpiId =
@@ -1222,16 +1351,27 @@ app.post(
 
       if (
         value === undefined ||
-        value === null
+        value === null ||
+        value === ""
       ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "KPI value is required",
-          });
+        return res.status(400).json({
+          error: "value is required",
+        });
       }
 
+      const numericValue =
+        Number(value);
+
+      if (
+        Number.isNaN(numericValue)
+      ) {
+        return res.status(400).json({
+          error:
+            "value must be a valid number",
+        });
+      }
+
+      // Check that the KPI exists.
       const kpiResult =
         await pool.query(
           `
@@ -1240,6 +1380,7 @@ app.post(
             name
           FROM kpis
           WHERE id = $1
+          LIMIT 1
           `,
           [kpiId]
         );
@@ -1247,15 +1388,12 @@ app.post(
       if (
         kpiResult.rows.length === 0
       ) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "KPI not found",
-          });
+        return res.status(404).json({
+          error: "KPI not found",
+        });
       }
 
-      const readingResult =
+      const result =
         await pool.query(
           `
           INSERT INTO kpi_readings
@@ -1274,24 +1412,21 @@ app.post(
           `,
           [
             kpiId,
-            value,
+            numericValue,
             source ||
-              "Manual Entry",
+              "Manual API Entry",
           ]
         );
 
       console.log(
-        `New KPI reading added: ${kpiResult.rows[0].name} = ${value}`
+        `New KPI reading added: ${kpiResult.rows[0].name} = ${numericValue}`
       );
 
       res.status(201).json({
         success: true,
-
         message:
           "KPI value updated successfully",
-
-        reading:
-          readingResult.rows[0],
+        reading: result.rows[0],
       });
     } catch (error) {
       console.error(
@@ -1313,32 +1448,24 @@ app.post(
 
 app.get(
   "/api/notification-logs",
-
   async (req, res) => {
     try {
       const result =
         await pool.query(`
           SELECT
-            nl.id,
-            nl.alert_id,
-            nl.recipient,
-            nl.channel,
-            nl.status,
-            nl.error_message,
-            nl.retry_count,
-            nl.max_retries,
-            nl.next_retry_at,
-            nl.last_retry_at,
-            nl.escalation_level,
-            nl.sent_at,
+            nl.*,
             a.status AS alert_status,
-            k.name AS kpi_name
+            a.kpi_id,
+            k.name AS kpi_name,
+            d.name AS department
           FROM notification_logs nl
-          LEFT JOIN alerts a
+          JOIN alerts a
             ON nl.alert_id = a.id
-          LEFT JOIN kpis k
+          JOIN kpis k
             ON a.kpi_id = k.id
-          ORDER BY nl.sent_at DESC
+          JOIN departments d
+            ON k.department_id = d.id
+          ORDER BY nl.created_at DESC
         `);
 
       res.json(result.rows);
@@ -1357,279 +1484,11 @@ app.get(
 );
 
 // ==========================================
-// GET DEPARTMENTS
-// ==========================================
-
-app.get(
-  "/api/departments",
-
-  async (req, res) => {
-    try {
-      const result =
-        await pool.query(`
-          SELECT
-            id,
-            name
-          FROM departments
-          ORDER BY id
-        `);
-
-      res.json(result.rows);
-    } catch (error) {
-      console.error(
-        "Error fetching departments:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to fetch departments",
-      });
-    }
-  }
-);
-
-// ==========================================
-// GET NOTIFICATION ROUTES
-// ==========================================
-
-app.get(
-  "/api/notification-routes",
-
-  async (req, res) => {
-    try {
-      const result =
-        await pool.query(`
-          SELECT
-            nr.id,
-            nr.department_id,
-            d.name AS department,
-            nr.severity,
-            nr.recipient,
-            nr.channel,
-            nr.is_active,
-            nr.created_at
-          FROM notification_routes nr
-          JOIN departments d
-            ON nr.department_id = d.id
-          ORDER BY nr.id
-        `);
-
-      res.json(result.rows);
-    } catch (error) {
-      console.error(
-        "Error fetching notification routes:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to fetch notification routes",
-      });
-    }
-  }
-);
-
-// ==========================================
-// CREATE NOTIFICATION ROUTE
-// ==========================================
-
-app.post(
-  "/api/notification-routes",
-
-  async (req, res) => {
-    try {
-      const {
-        department_id,
-        severity,
-        recipient,
-        channel,
-      } = req.body;
-
-      if (
-        !department_id ||
-        !severity ||
-        !recipient
-      ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Department, severity and recipient are required",
-          });
-      }
-
-      const result =
-        await pool.query(
-          `
-          INSERT INTO notification_routes
-          (
-            department_id,
-            severity,
-            recipient,
-            channel,
-            is_active
-          )
-          VALUES
-          (
-            $1,
-            $2,
-            $3,
-            $4,
-            TRUE
-          )
-          RETURNING *
-          `,
-          [
-            department_id,
-            severity,
-            recipient,
-            channel || "EMAIL",
-          ]
-        );
-
-      res.status(201).json({
-        success: true,
-
-        message:
-          "Notification route created successfully",
-
-        route:
-          result.rows[0],
-      });
-    } catch (error) {
-      console.error(
-        "Error creating notification route:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to create notification route",
-      });
-    }
-  }
-);
-
-// ==========================================
-// TOGGLE NOTIFICATION ROUTE
-// ==========================================
-
-app.put(
-  "/api/notification-routes/:id/toggle",
-
-  async (req, res) => {
-    try {
-      const routeId =
-        req.params.id;
-
-      const result =
-        await pool.query(
-          `
-          UPDATE notification_routes
-          SET
-            is_active =
-              NOT is_active
-          WHERE id = $1
-          RETURNING *
-          `,
-          [routeId]
-        );
-
-      if (
-        result.rows.length === 0
-      ) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "Notification route not found",
-          });
-      }
-
-      res.json({
-        success: true,
-
-        message:
-          "Notification route status updated",
-
-        route:
-          result.rows[0],
-      });
-    } catch (error) {
-      console.error(
-        "Error toggling notification route:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to update notification route",
-      });
-    }
-  }
-);
-
-// ==========================================
-// DELETE NOTIFICATION ROUTE
-// ==========================================
-
-app.delete(
-  "/api/notification-routes/:id",
-
-  async (req, res) => {
-    try {
-      const routeId =
-        req.params.id;
-
-      const result =
-        await pool.query(
-          `
-          DELETE FROM notification_routes
-          WHERE id = $1
-          RETURNING *
-          `,
-          [routeId]
-        );
-
-      if (
-        result.rows.length === 0
-      ) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "Notification route not found",
-          });
-      }
-
-      res.json({
-        success: true,
-
-        message:
-          "Notification route deleted successfully",
-      });
-    } catch (error) {
-      console.error(
-        "Error deleting notification route:",
-        error
-      );
-
-      res.status(500).json({
-        error:
-          "Failed to delete notification route",
-      });
-    }
-  }
-);
-
-// ==========================================
 // GET ESCALATION RULES
 // ==========================================
 
 app.get(
   "/api/escalation-rules",
-
   async (req, res) => {
     try {
       const result =
@@ -1675,7 +1534,6 @@ app.get(
 
 app.post(
   "/api/escalation-rules",
-
   async (req, res) => {
     try {
       const {
@@ -1693,12 +1551,10 @@ app.post(
         !escalation_level ||
         !recipient
       ) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Department, severity, escalation level and recipient are required",
-          });
+        return res.status(400).json({
+          error:
+            "department_id, severity, escalation_level and recipient are required",
+        });
       }
 
       const result =
@@ -1711,8 +1567,7 @@ app.post(
             escalation_level,
             recipient,
             channel,
-            escalate_after_minutes,
-            is_active
+            escalate_after_minutes
           )
           VALUES
           (
@@ -1721,8 +1576,7 @@ app.post(
             $3,
             $4,
             $5,
-            $6,
-            TRUE
+            $6
           )
           RETURNING *
           `,
@@ -1739,12 +1593,9 @@ app.post(
 
       res.status(201).json({
         success: true,
-
         message:
           "Escalation rule created successfully",
-
-        rule:
-          result.rows[0],
+        rule: result.rows[0],
       });
     } catch (error) {
       console.error(
@@ -1755,12 +1606,10 @@ app.post(
       if (
         error.code === "23505"
       ) {
-        return res
-          .status(409)
-          .json({
-            error:
-              "An escalation rule already exists for this department, severity and level",
-          });
+        return res.status(409).json({
+          error:
+            "An escalation rule already exists for this department, severity and level",
+        });
       }
 
       res.status(500).json({
@@ -1777,7 +1626,6 @@ app.post(
 
 app.put(
   "/api/escalation-rules/:id/toggle",
-
   async (req, res) => {
     try {
       const ruleId =
@@ -1788,8 +1636,7 @@ app.put(
           `
           UPDATE escalation_rules
           SET
-            is_active =
-              NOT is_active
+            is_active = NOT is_active
           WHERE id = $1
           RETURNING *
           `,
@@ -1799,22 +1646,17 @@ app.put(
       if (
         result.rows.length === 0
       ) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "Escalation rule not found",
-          });
+        return res.status(404).json({
+          error:
+            "Escalation rule not found",
+        });
       }
 
       res.json({
         success: true,
-
         message:
-          "Escalation rule status updated",
-
-        rule:
-          result.rows[0],
+          "Escalation rule status updated successfully",
+        rule: result.rows[0],
       });
     } catch (error) {
       console.error(
@@ -1836,7 +1678,6 @@ app.put(
 
 app.delete(
   "/api/escalation-rules/:id",
-
   async (req, res) => {
     try {
       const ruleId =
@@ -1855,17 +1696,14 @@ app.delete(
       if (
         result.rows.length === 0
       ) {
-        return res
-          .status(404)
-          .json({
-            error:
-              "Escalation rule not found",
-          });
+        return res.status(404).json({
+          error:
+            "Escalation rule not found",
+        });
       }
 
       res.json({
         success: true,
-
         message:
           "Escalation rule deleted successfully",
       });
@@ -1884,27 +1722,74 @@ app.delete(
 );
 
 // ==========================================
-// AUTOMATIC ESCALATION CHECKER
+// HEALTH CHECK
 // ==========================================
 
-setInterval(
-  async () => {
-    await processTimedEscalations();
-  },
-  60 * 1000
+app.get(
+  "/api/health",
+  async (req, res) => {
+    try {
+      await pool.query(
+        "SELECT 1"
+      );
+
+      res.json({
+        status: "OK",
+        server: "running",
+        database: "connected",
+        timestamp:
+          new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({
+        status: "ERROR",
+        server: "running",
+        database: "disconnected",
+        error: error.message,
+      });
+    }
+  }
 );
 
 // ==========================================
-// SERVER
+// 404 HANDLER
+// ==========================================
+
+app.use((req, res) => {
+  res.status(404).json({
+    error: "API route not found",
+    method: req.method,
+    path: req.originalUrl,
+  });
+});
+
+// ==========================================
+// GLOBAL ERROR HANDLER
+// ==========================================
+
+app.use(
+  (error, req, res, next) => {
+    console.error(
+      "Unhandled server error:",
+      error
+    );
+
+    res.status(500).json({
+      error:
+        "Internal server error",
+    });
+  }
+);
+
+// ==========================================
+// START SERVER
 // ==========================================
 
 const PORT =
   process.env.PORT || 5000;
 
-app.listen(
+const server = app.listen(
   PORT,
-  "0.0.0.0",
-
   () => {
     console.log(
       `Server running on port ${PORT}`
@@ -1919,7 +1804,68 @@ app.listen(
     );
 
     console.log(
+      "Alert acknowledgement system enabled"
+    );
+
+    console.log(
       "Escalation checker running every 1 minute"
     );
   }
+);
+
+// ==========================================
+// TIMED ESCALATION CHECKER
+// ==========================================
+
+const escalationInterval =
+  setInterval(
+    processTimedEscalations,
+    60 * 1000
+  );
+
+// ==========================================
+// GRACEFUL SHUTDOWN
+// ==========================================
+
+function shutdown() {
+  console.log(
+    "Shutting down server..."
+  );
+
+  clearInterval(
+    escalationInterval
+  );
+
+  server.close(() => {
+    console.log(
+      "HTTP server closed"
+    );
+
+    pool.end()
+      .then(() => {
+        console.log(
+          "PostgreSQL connection pool closed"
+        );
+
+        process.exit(0);
+      })
+      .catch((error) => {
+        console.error(
+          "Error closing PostgreSQL pool:",
+          error
+        );
+
+        process.exit(1);
+      });
+  });
+}
+
+process.on(
+  "SIGINT",
+  shutdown
+);
+
+process.on(
+  "SIGTERM",
+  shutdown
 );

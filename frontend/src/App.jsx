@@ -18,6 +18,7 @@ function App() {
   const [updatingKpi, setUpdatingKpi] = useState(null);
 
   const [selectedAlertId, setSelectedAlertId] = useState(null);
+  const [acknowledgingAlert, setAcknowledgingAlert] = useState(null);
 
   const [newRoute, setNewRoute] = useState({
     department_id: "",
@@ -155,7 +156,74 @@ function App() {
   };
 
   // ==========================================
-  // RESOLVE ALERT - FIXED
+  // ACKNOWLEDGE ALERT
+  // ==========================================
+  const acknowledgeAlert = async (id) => {
+    setAcknowledgingAlert(id);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/alerts/${id}/acknowledge`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            acknowledged_by: "Rahul",
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
+            data.error ||
+            "Failed to acknowledge alert"
+        );
+      }
+
+      setAlerts((previousAlerts) =>
+        previousAlerts.map((alert) =>
+          Number(alert.id) === Number(id)
+            ? {
+                ...alert,
+                ...data.alert,
+                is_acknowledged: true,
+                acknowledged_by:
+                  data.alert?.acknowledged_by || "Rahul",
+                acknowledged_at:
+                  data.alert?.acknowledged_at ||
+                  new Date().toISOString(),
+                escalation_status:
+                  data.alert?.escalation_status ||
+                  "ACKNOWLEDGED",
+              }
+            : alert
+        )
+      );
+
+      setSelectedAlertId(id);
+
+      console.log(
+        `Alert #${id} acknowledged successfully`
+      );
+    } catch (error) {
+      console.error(
+        "Error acknowledging alert:",
+        error
+      );
+
+      alert(error.message);
+    } finally {
+      setAcknowledgingAlert(null);
+    }
+  };
+
+  // ==========================================
+  // RESOLVE ALERT
   // ==========================================
   const resolveAlert = async (id) => {
     try {
@@ -448,13 +516,15 @@ function App() {
     ).length;
 
   const selectedAlert =
-    alerts.find(
-      (alert) =>
-        Number(alert.id) === Number(selectedAlertId)
-    ) ||
-    activeAlerts[0] ||
-    alerts[0] ||
-    null;
+  activePage === "overview"
+    ? activeAlerts[0] || alerts[0] || null
+    : alerts.find(
+        (alert) =>
+          Number(alert.id) === Number(selectedAlertId)
+      ) ||
+      activeAlerts[0] ||
+      alerts[0] ||
+      null;
 
   const selectedAnalysis = selectedAlert
     ? getAlertAnalysis(selectedAlert.message)
@@ -679,6 +749,8 @@ function App() {
               notification={selectedAlertNotification}
               formatDate={formatDate}
               onResolve={resolveAlert}
+              onAcknowledge={acknowledgeAlert}
+              acknowledgingAlert={acknowledgingAlert}
             />
           ) : (
             <EmptyState
@@ -720,6 +792,7 @@ function App() {
                     <th>Department</th>
                     <th>Severity</th>
                     <th>Status</th>
+                    <th>Acknowledgement</th>
                     <th>Action</th>
                   </tr>
                 </thead>
@@ -754,6 +827,20 @@ function App() {
                           {alert.is_resolved
                             ? "Resolved"
                             : "Active"}
+                        </span>
+                      </td>
+
+                      <td>
+                        <span
+                          className={`acknowledgement-badge ${
+                            alert.is_acknowledged
+                              ? "acknowledged"
+                              : "pending"
+                          }`}
+                        >
+                          {alert.is_acknowledged
+                            ? "Acknowledged"
+                            : "Unacknowledged"}
                         </span>
                       </td>
 
@@ -830,7 +917,7 @@ function App() {
             <Benefit
               icon="✓"
               title="Accountability"
-              description="Track alert resolution and notification delivery."
+              description="Track alert acknowledgement, resolution and notification delivery."
             />
           </div>
         </div>
@@ -940,7 +1027,7 @@ function App() {
       <PageHeader
         eyebrow="AI ALERT INTELLIGENCE"
         title="Alert Manager"
-        description="Investigate active events, review AI analysis and manage resolution."
+        description="Investigate active events, acknowledge alerts, review AI analysis and manage resolution."
       />
 
       <div className="alerts-workspace">
@@ -996,6 +1083,18 @@ function App() {
 
                   <span>{alert.department}</span>
 
+                  <span
+                    className={`acknowledgement-badge ${
+                      alert.is_acknowledged
+                        ? "acknowledged"
+                        : "pending"
+                    }`}
+                  >
+                    {alert.is_acknowledged
+                      ? "Acknowledged"
+                      : "Unacknowledged"}
+                  </span>
+
                   <small>
                     {formatDate(alert.created_at)}
                   </small>
@@ -1013,6 +1112,8 @@ function App() {
               notification={selectedAlertNotification}
               formatDate={formatDate}
               onResolve={resolveAlert}
+              onAcknowledge={acknowledgeAlert}
+              acknowledgingAlert={acknowledgingAlert}
               expanded
             />
           ) : (
@@ -1025,8 +1126,7 @@ function App() {
       </div>
     </>
   );
-
-  // ==========================================
+    // ==========================================
   // NOTIFICATIONS PAGE
   // ==========================================
   const renderNotifications = () => (
@@ -1067,7 +1167,6 @@ function App() {
         <div className="panel-header">
           <div>
             <h2>Delivery Log</h2>
-
             <p>Full notification audit history.</p>
           </div>
         </div>
@@ -1096,7 +1195,6 @@ function App() {
                 {notificationLogs.map((log) => (
                   <tr key={log.id}>
                     <td>#{log.id}</td>
-
                     <td>#{log.alert_id || "-"}</td>
 
                     <td>
@@ -1154,7 +1252,6 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>Add Notification Route</h2>
-
               <p>Create a new alert delivery rule.</p>
             </div>
           </div>
@@ -1227,7 +1324,9 @@ function App() {
                   })
                 }
               >
-                <option value="EMAIL">Email</option>
+                <option value="EMAIL">
+                  Email
+                </option>
               </select>
             </label>
 
@@ -1264,7 +1363,6 @@ function App() {
           <div className="panel-header">
             <div>
               <h2>Routing Summary</h2>
-
               <p>Current routing configuration.</p>
             </div>
           </div>
@@ -1341,15 +1439,18 @@ function App() {
                 {notificationRoutes.map((route) => (
                   <tr key={route.id}>
                     <td>
-                      <strong>{route.department}</strong>
+                      <strong>
+                        {route.department}
+                      </strong>
                     </td>
 
                     <td>
-                      <StatusBadge status={route.severity} />
+                      <StatusBadge
+                        status={route.severity}
+                      />
                     </td>
 
                     <td>{route.channel}</td>
-
                     <td>{route.recipient}</td>
 
                     <td>
@@ -1415,7 +1516,9 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          <div className="brand-icon">AI</div>
+          <div className="brand-icon">
+            AI
+          </div>
 
           <div>
             <strong>AI Notification</strong>
@@ -1437,7 +1540,9 @@ function App() {
             active={activePage === "kpis"}
             icon="◇"
             label="KPIs"
-            onClick={() => setActivePage("kpis")}
+            onClick={() =>
+              setActivePage("kpis")
+            }
           />
 
           <NavButton
@@ -1445,11 +1550,15 @@ function App() {
             icon="!"
             label="Alerts"
             badge={activeAlerts.length}
-            onClick={() => openAlertsPage()}
+            onClick={() =>
+              openAlertsPage()
+            }
           />
 
           <NavButton
-            active={activePage === "notifications"}
+            active={
+              activePage === "notifications"
+            }
             icon="✉"
             label="Notifications"
             onClick={() =>
@@ -1477,7 +1586,9 @@ function App() {
           />
 
           <div>
-            <strong>System Monitoring</strong>
+            <strong>
+              System Monitoring
+            </strong>
 
             <span>
               {failedNotifications > 0
@@ -1526,7 +1637,9 @@ function NavButton({
       }`}
       onClick={onClick}
     >
-      <span className="nav-icon">{icon}</span>
+      <span className="nav-icon">
+        {icon}
+      </span>
 
       <span>{label}</span>
 
@@ -1569,7 +1682,9 @@ function MetricCard({
   return (
     <div className={`metric-card ${tone}`}>
       <div className="metric-card-top">
-        <div className={`metric-icon ${tone}`}>
+        <div
+          className={`metric-icon ${tone}`}
+        >
           {icon}
         </div>
 
@@ -1662,7 +1777,9 @@ function EmptyState({
 }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon">◇</div>
+      <div className="empty-icon">
+        ◇
+      </div>
 
       <h3>{title}</h3>
 
@@ -1681,6 +1798,8 @@ function AlertDetail({
   notification,
   formatDate,
   onResolve,
+  onAcknowledge,
+  acknowledgingAlert,
   expanded = false,
 }) {
   const possibleCauses = Array.isArray(
@@ -1716,7 +1835,8 @@ function AlertDetail({
   const riskLevel =
     alert.risk_level || "Not Available";
 
-  const riskClass = riskLevel.toLowerCase();
+  const riskClass =
+    riskLevel.toLowerCase();
 
   return (
     <div
@@ -1727,7 +1847,9 @@ function AlertDetail({
       <div className="alert-detail-heading">
         <div>
           <div className="alert-title-row">
-            <StatusBadge status={alert.status} />
+            <StatusBadge
+              status={alert.status}
+            />
 
             <span
               className={`state-indicator ${
@@ -1739,6 +1861,18 @@ function AlertDetail({
               {alert.is_resolved
                 ? "Resolved"
                 : "Active"}
+            </span>
+
+            <span
+              className={`acknowledgement-badge ${
+                alert.is_acknowledged
+                  ? "acknowledged"
+                  : "pending"
+              }`}
+            >
+              {alert.is_acknowledged
+                ? "Acknowledged"
+                : "Unacknowledged"}
             </span>
 
             {hasEnhancedAI && (
@@ -1755,16 +1889,37 @@ function AlertDetail({
           <p>{alert.department}</p>
         </div>
 
-        {!alert.is_resolved && (
-          <button
-            className="resolve-button"
-            onClick={() =>
-              onResolve(alert.id)
-            }
-          >
-            Resolve Alert
-          </button>
-        )}
+        <div className="alert-action-buttons">
+          {!alert.is_acknowledged &&
+            !alert.is_resolved && (
+              <button
+                className="acknowledge-button"
+                onClick={() =>
+                  onAcknowledge(alert.id)
+                }
+                disabled={
+                  acknowledgingAlert ===
+                  alert.id
+                }
+              >
+                {acknowledgingAlert ===
+                alert.id
+                  ? "Acknowledging..."
+                  : "Acknowledge"}
+              </button>
+            )}
+
+          {!alert.is_resolved && (
+            <button
+              className="resolve-button"
+              onClick={() =>
+                onResolve(alert.id)
+              }
+            >
+              Resolve Alert
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="alert-meta-grid">
@@ -1796,13 +1951,50 @@ function AlertDetail({
 
           <strong
             className={
-              notification?.status === "FAILED"
+              notification?.status ===
+              "FAILED"
                 ? "text-danger"
                 : "text-success"
             }
           >
             {notification?.status ||
               "Not recorded"}
+          </strong>
+        </div>
+
+        <div>
+          <span>Acknowledgement</span>
+
+          <strong
+            className={
+              alert.is_acknowledged
+                ? "text-success"
+                : ""
+            }
+          >
+            {alert.is_acknowledged
+              ? "Acknowledged"
+              : "Pending"}
+          </strong>
+        </div>
+
+        <div>
+          <span>Acknowledged By</span>
+
+          <strong>
+            {alert.acknowledged_by || "-"}
+          </strong>
+        </div>
+
+        <div>
+          <span>Acknowledged At</span>
+
+          <strong>
+            {alert.acknowledged_at
+              ? formatDate(
+                  alert.acknowledged_at
+                )
+              : "-"}
           </strong>
         </div>
       </div>
@@ -1903,7 +2095,9 @@ function AlertDetail({
               <div>
                 <span>BUSINESS IMPACT</span>
 
-                <h4>AI Impact Summary</h4>
+                <h4>
+                  AI Impact Summary
+                </h4>
               </div>
             </div>
 
@@ -1944,7 +2138,9 @@ function AlertDetail({
                         ? cause
                         : cause.description ||
                           cause.cause ||
-                          JSON.stringify(cause)}
+                          JSON.stringify(
+                            cause
+                          )}
                     </p>
                   </div>
                 )
