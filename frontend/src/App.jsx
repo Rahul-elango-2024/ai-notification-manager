@@ -1,7 +1,40 @@
 import { useEffect, useMemo, useState } from "react";
+import React from "react";
+import { io } from "socket.io-client";
 import "./App.css";
 
 const API_URL = "http://localhost:5000";
+
+const socket = io(API_URL);
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("ErrorBoundary caught an error", error, errorInfo);
+    this.setState({ errorInfo });
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ padding: 20, background: "red", color: "white" }}>
+          <h2>Something went wrong in AlertDetail.</h2>
+          <details style={{ whiteSpace: "pre-wrap" }}>
+            {this.state.error && this.state.error.toString()}
+            <br />
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </details>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function App() {
   const [activePage, setActivePage] = useState("overview");
@@ -16,10 +49,12 @@ function App() {
 
   const [kpiValues, setKpiValues] = useState({});
   const [updatingKpi, setUpdatingKpi] = useState(null);
+const [selectedAlertId, setSelectedAlertId] = useState(null);
+const [acknowledgingAlert, setAcknowledgingAlert] = useState(null);
 
-  const [selectedAlertId, setSelectedAlertId] = useState(null);
-  const [acknowledgingAlert, setAcknowledgingAlert] = useState(null);
-
+const [alertDetails, setAlertDetails] = useState(null);
+const [loadingAlertDetails, setLoadingAlertDetails] =
+  useState(false);
   const [newRoute, setNewRoute] = useState({
     department_id: "",
     severity: "WARNING",
@@ -598,49 +633,98 @@ if (!resolutionNote.trim()) {
     ).values(),
   ];
 
-  // ==========================================
-  // OPEN ALERTS PAGE
-  // ==========================================
-  const openAlertsPage = (alertId = null) => {
-    if (alertId !== null && alertId !== undefined) {
-      setSelectedAlertId(alertId);
-    } else {
-      const firstActiveAlert = alerts.find(
-        (alert) => !alert.is_resolved
-      );
+ // ==========================================
+// OPEN ALERTS PAGE
+// ==========================================
+const openAlertsPage = (alertId = null) => {
+  if (alertId !== null && alertId !== undefined) {
+    setSelectedAlertId(alertId);
+  } else {
+    const firstActiveAlert = alerts.find(
+      (alert) => !alert.is_resolved
+    );
 
-      setSelectedAlertId(
-        firstActiveAlert?.id ?? alerts[0]?.id ?? null
-      );
-    }
-
-    setActivePage("alerts");
-  };
-
-  // ==========================================
-  // AUTO REFRESH
-  // ==========================================
-  useEffect(() => {
-    fetchData();
-
-    const interval = setInterval(() => {
-      fetchData();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-logo">AI</div>
-
-        <h2>AI Notification Manager</h2>
-
-        <p>Loading enterprise monitoring dashboard...</p>
-      </div>
+    setSelectedAlertId(
+      firstActiveAlert?.id ?? alerts[0]?.id ?? null
     );
   }
+
+  setActivePage("alerts");
+};
+
+// ==========================================
+// INITIAL DATA LOAD
+// ==========================================
+useEffect(() => {
+  fetchData();
+}, []);
+
+// ==========================================
+// AUTO REFRESH
+// ==========================================
+useEffect(() => {
+  socket.on("connect", () => {
+    console.log("Connected:", socket.id);
+  });
+
+  socket.on("newAlert", () => {
+    console.log("New alert received!");
+    fetchData(true);
+  });
+
+  return () => {
+    socket.off("connect");
+    socket.off("newAlert");
+  };
+}, []);
+
+// ==========================================
+// FETCH SELECTED ALERT DETAILS
+// ==========================================
+useEffect(() => {
+  if (!selectedAlertId) {
+    setAlertDetails(null);
+    return;
+  }
+
+  const fetchAlertDetails = async () => {
+    setLoadingAlertDetails(true);
+
+    try {
+      const response = await fetch(
+        `${API_URL}/api/alerts/${selectedAlertId}/details`
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch alert details");
+      }
+
+      const data = await response.json();
+
+      setAlertDetails(data);
+    } catch (error) {
+      console.error(
+        "Error fetching alert details:",
+        error
+      );
+    } finally {
+      setLoadingAlertDetails(false);
+    }
+  };
+
+  fetchAlertDetails();
+}, [selectedAlertId]);
+
+// ==========================================
+// LOADING SCREEN
+// ==========================================
+if (loading) {
+  return (
+    <div className="loading-screen">
+      ...
+    </div>
+  );
+}
 
   // ==========================================
   // OVERVIEW PAGE
@@ -790,15 +874,19 @@ if (!resolutionNote.trim()) {
           </div>
 
           {selectedAlert ? (
-            <AlertDetail
-              alert={selectedAlert}
-              analysis={selectedAnalysis}
-              notification={selectedAlertNotification}
-              formatDate={formatDate}
-              onResolve={resolveAlert}
-              onAcknowledge={acknowledgeAlert}
-              acknowledgingAlert={acknowledgingAlert}
-            />
+        <ErrorBoundary>
+          <AlertDetail
+  alert={selectedAlert}
+  analysis={selectedAnalysis}
+  notification={selectedAlertNotification}
+  alertDetails={alertDetails}
+  loadingAlertDetails={loadingAlertDetails}
+  formatDate={formatDate}
+  onResolve={resolveAlert}
+  onAcknowledge={acknowledgeAlert}
+  acknowledgingAlert={acknowledgingAlert}
+/>
+        </ErrorBoundary>
           ) : (
             <EmptyState
               title="No alerts detected"
@@ -1153,16 +1241,20 @@ if (!resolutionNote.trim()) {
 
         <div className="panel alert-full-detail">
           {selectedAlert ? (
+        <ErrorBoundary>
             <AlertDetail
-              alert={selectedAlert}
-              analysis={selectedAnalysis}
-              notification={selectedAlertNotification}
-              formatDate={formatDate}
-              onResolve={resolveAlert}
-              onAcknowledge={acknowledgeAlert}
-              acknowledgingAlert={acknowledgingAlert}
-              expanded
-            />
+  alert={selectedAlert}
+  analysis={selectedAnalysis}
+  notification={selectedAlertNotification}
+  alertDetails={alertDetails}
+  loadingAlertDetails={loadingAlertDetails}
+  formatDate={formatDate}
+  onResolve={resolveAlert}
+  onAcknowledge={acknowledgeAlert}
+  acknowledgingAlert={acknowledgingAlert}
+  expanded
+/>   
+        </ErrorBoundary>
           ) : (
             <EmptyState
               title="Select an alert"
@@ -1859,12 +1951,19 @@ function AlertDetail({
   alert,
   analysis,
   notification,
+  alertDetails,
+  loadingAlertDetails,
   formatDate,
   onResolve,
   onAcknowledge,
   acknowledgingAlert,
-  expanded = false,
+  expanded
 }) {
+  console.log("--- AlertDetail RENDER ---");
+  console.log("AlertDetails:", alertDetails);
+  console.log("Notification History:", alertDetails?.notificationHistory);
+  console.log("loadingAlertDetails:", loadingAlertDetails);
+
   const possibleCauses = Array.isArray(
     alert.possible_causes
   )
@@ -1922,7 +2021,7 @@ function AlertDetail({
               }`}
             >
               {alert.is_resolved
-                ? "Resolved"
+                ? (alert.resolved_by === "SYSTEM" ? "Auto Resolved" : "Resolved")
                 : "Active"}
             </span>
 
@@ -2088,7 +2187,7 @@ function AlertDetail({
           <span>Resolution Note</span>
 
           <strong>
-            {alert.resolution_note || "-"}
+            {alert.resolution_note || (alert.resolved_by === "SYSTEM" ? "Automatically resolved because KPI returned to NORMAL." : "-")}
           </strong>
         </div>
       </div>
@@ -2410,6 +2509,62 @@ function AlertDetail({
           </div>
         </>
       )}
+      <div style={{background:"red",padding:20,color:"white",fontWeight:"bold",marginBottom:20}}>
+        TEST NOTIFICATION HISTORY - If you see this, JSX is reachable!
+      </div>
+      <div className="analysis-section">
+  <div className="analysis-label">
+    Notification History
+  </div>
+
+  {loadingAlertDetails ? (
+    <p>Loading notification history...</p>
+  ) : alertDetails?.notificationHistory?.length ? (
+    <div className="data-table-wrapper">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>Recipient</th>
+            <th>Status</th>
+            <th>Level</th>
+            <th>Retries</th>
+            <th>Time</th>
+          </tr>
+        </thead>
+
+        <tbody>
+          {alertDetails.notificationHistory.map((item) => (
+            <tr key={item.id}>
+              <td>{item.recipient}</td>
+
+              <td>
+                <span
+                  className={`delivery-badge ${(item.status || "").toLowerCase()}`}
+                >
+                  {item.status}
+                </span>
+              </td>
+
+              <td>
+                Level {item.escalation_level}
+              </td>
+
+              <td>
+                {item.retry_count}/{item.max_retries}
+              </td>
+
+              <td>
+                {formatDate(item.sent_at)}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  ) : (
+    <p>No notification history available.</p>
+  )}
+</div>
 
       {notification?.error_message && (
         <div className="analysis-section delivery-error">

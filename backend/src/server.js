@@ -2,6 +2,9 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 
+const http = require("http");
+const { Server } = require("socket.io");
+
 const pool = require("./db");
 const {
   sendEmail,
@@ -10,6 +13,25 @@ const {
 const { generateAIAnalysis } = require("./aiService");
 
 const app = express();
+
+const httpServer = http.createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: "http://localhost:5173",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+  },
+});
+
+app.set("io", io);
+
+io.on("connection", (socket) => {
+  console.log("Client connected:", socket.id);
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected:", socket.id);
+  });
+});
 
 app.use(cors());
 app.use(express.json());
@@ -20,7 +42,6 @@ app.use(express.json());
 
 const MAX_EMAIL_RETRIES = 3;
 const EMAIL_RETRY_DELAY = 5000;
-
 // ==========================================
 // ROOT API
 // ==========================================
@@ -549,6 +570,41 @@ AI Notification Manager.
     );
   }
 }
+// ==========================================
+// AUTO RESOLVE ALERTS
+// ==========================================
+
+async function autoResolveAlert(kpi) {
+  try {
+    const result = await pool.query(
+      `
+      UPDATE alerts
+      SET
+        is_resolved = TRUE,
+        resolved_at = CURRENT_TIMESTAMP,
+        resolved_by = 'SYSTEM',
+        resolution_note = 'Automatically resolved because KPI returned to NORMAL.',
+        escalation_status = 'AUTO_RESOLVED'
+      WHERE
+        kpi_id = $1
+        AND is_resolved = FALSE
+      RETURNING id, status
+      `,
+      [kpi.id]
+    );
+
+    if (result.rows.length > 0) {
+      console.log(
+        `${result.rows.length} alert(s) automatically resolved for ${kpi.kpi_name}`
+      );
+    }
+  } catch (error) {
+    console.error(
+      `Auto resolve failed for ${kpi.kpi_name}:`,
+      error
+    );
+  }
+}
 
 // ==========================================
 // KPI MONITORING
@@ -630,163 +686,185 @@ app.get("/api/monitoring", async (req, res) => {
           status,
         };
       });
+// ==========================================
+// CREATE ALERTS AND SEND NOTIFICATIONS
+// ==========================================
 
-    // ==========================================
-    // CREATE ALERTS AND SEND NOTIFICATIONS
-    // ==========================================
+for (const kpi of monitoringData) {
 
-    for (const kpi of monitoringData) {
-      if (
-        kpi.status !== "WARNING" &&
-        kpi.status !== "CRITICAL"
-      ) {
-        continue;
-      }
+  if (kpi.status === "NORMAL") {
+    await autoResolveAlert(kpi);
+    continue;
+  }
 
-      // ==========================================
-      // CHECK EXISTING ACTIVE ALERT
-      // ==========================================
+  if (
+    kpi.status !== "WARNING" &&
+    kpi.status !== "CRITICAL"
+  ) {
+    continue;
+  }
 
-      const existingAlert =
-        await pool.query(
-          `
-          SELECT id
-          FROM alerts
-          WHERE kpi_id = $1
-            AND status = $2
-            AND is_resolved = FALSE
-          LIMIT 1
-          `,
-          [
-            kpi.id,
-            kpi.status,
-          ]
-        );
+ // ==========================================
+// CHECK EXISTING ACTIVE ALERT
+// ==========================================
 
-      if (
-        existingAlert.rows.length > 0
-      ) {
-        continue;
-      }
+const existingAlert =
+  await pool.query(
+    `
+    SELECT id
+    FROM alerts
+    WHERE kpi_id = $1
+      AND status = $2
+      AND is_resolved = FALSE
+    LIMIT 1
+    `,
+    [
+      kpi.id,
+      kpi.status,
+    ]
+  );
 
-      // ==========================================
-      // GENERATE AI ANALYSIS
-      // ==========================================
+if (
+  existingAlert.rows.length > 0
+) {
+  continue;
+}
 
-      const aiAnalysis =
-        generateAIAnalysis(
-          kpi,
-          kpi.status
-        );
+// ==========================================
+// GENERATE AI ANALYSIS
+// ==========================================
 
-      console.log(
-        `AI analysis generated for ${kpi.kpi_name}`
-      );
+const aiAnalysis =
+  generateAIAnalysis(
+    kpi,
+    kpi.status
+  );
 
-      const message =
-        `${aiAnalysis.summary}\n\n` +
-        `${aiAnalysis.analysis}\n\n` +
-        `Recommendation: ${aiAnalysis.recommendation}`;
+console.log(
+  `AI analysis generated for ${kpi.kpi_name}`
+);
 
-      // ==========================================
-      // CREATE ALERT WITH DUPLICATE PROTECTION
-      // ==========================================
+const message =
+  `${aiAnalysis.summary}\n\n` +
+  `${aiAnalysis.analysis}\n\n` +
+  `Recommendation: ${aiAnalysis.recommendation}`;
 
-      const newAlert =
-        await pool.query(
-          `
-          INSERT INTO alerts
-          (
-            kpi_id,
-            status,
-            message,
-            current_value,
-            risk_score,
-            risk_level,
-            deviation_percentage,
-            deviation_direction,
-            impact_summary,
-            possible_causes,
-            recommended_actions,
-            ai_timeline,
-            ai_generated_at,
-            escalation_level,
-            escalation_status
-          )
-          VALUES
-          (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7,
-            $8,
-            $9,
-            $10::jsonb,
-            $11::jsonb,
-            $12::jsonb,
-            $13,
-            0,
-            'NOT_ESCALATED'
-          )
-          ON CONFLICT (kpi_id, status)
-          WHERE is_resolved = FALSE
-          DO NOTHING
-          RETURNING *
-          `,
-          [
-            kpi.id,
-            kpi.status,
-            message,
-            kpi.current_value,
-            aiAnalysis.riskScore,
-            aiAnalysis.riskLevel,
-            aiAnalysis.deviationPercentage,
-            aiAnalysis.deviationDirection,
-            aiAnalysis.impactSummary,
-            JSON.stringify(
-              aiAnalysis.possibleCauses || []
-            ),
-            JSON.stringify(
-              aiAnalysis.recommendedActions || []
-            ),
-            JSON.stringify(
-              aiAnalysis.timeline || []
-            ),
-            aiAnalysis.generatedAt,
-          ]
-        );
+// ==========================================
+// CREATE ALERT WITH DUPLICATE PROTECTION
+// ==========================================
 
-      if (
-        newAlert.rows.length === 0
-      ) {
-        console.log(
-          `Duplicate active ${kpi.status} alert prevented for ${kpi.kpi_name}`
-        );
-        continue;
-      }
+const newAlert =
+  await pool.query(
+    `
+    INSERT INTO alerts
+    (
+      kpi_id,
+      status,
+      message,
+      current_value,
+      risk_score,
+      risk_level,
+      deviation_percentage,
+      deviation_direction,
+      impact_summary,
+      possible_causes,
+      recommended_actions,
+      ai_timeline,
+      ai_generated_at,
+      escalation_level,
+      escalation_status
+    )
+    VALUES
+    (
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      $8,
+      $9,
+      $10::jsonb,
+      $11::jsonb,
+      $12::jsonb,
+      $13,
+      0,
+      'NOT_ESCALATED'
+    )
+    ON CONFLICT (kpi_id, status)
+    WHERE is_resolved = FALSE
+    DO NOTHING
+    RETURNING *
+    `,
+    [
+      kpi.id,
+      kpi.status,
+      message,
+      kpi.current_value,
+      aiAnalysis.riskScore,
+      aiAnalysis.riskLevel,
+      aiAnalysis.deviationPercentage,
+      aiAnalysis.deviationDirection,
+      aiAnalysis.impactSummary,
+      JSON.stringify(
+        aiAnalysis.possibleCauses || []
+      ),
+      JSON.stringify(
+        aiAnalysis.recommendedActions || []
+      ),
+      JSON.stringify(
+        aiAnalysis.timeline || []
+      ),
+      aiAnalysis.generatedAt,
+    ]
+  );
 
-      const alertId =
-        newAlert.rows[0].id;
+if (
+  newAlert.rows.length === 0
+) {
+  console.log(
+    `Duplicate active ${kpi.status} alert prevented for ${kpi.kpi_name}`
+  );
+  continue;
+}
 
-      console.log(
-        `New ${kpi.status} alert created for ${kpi.kpi_name}`
-      );
+const alertId =
+  newAlert.rows[0].id;
 
-      console.log(
-        `Risk Score: ${aiAnalysis.riskScore}/100`
-      );
+// ==========================================
+// SOCKET.IO REAL-TIME NOTIFICATION
+// ==========================================
 
-      console.log(
-        `Risk Level: ${aiAnalysis.riskLevel}`
-      );
+const io = req.app.get("io");
 
-      console.log(
-        `Deviation: ${aiAnalysis.deviationText}`
-      );
+io.emit("newAlert", {
+  id: alertId,
+  kpi_name: kpi.kpi_name,
+  department: kpi.department,
+  status: kpi.status,
+  current_value: kpi.current_value,
+});
 
+// ==========================================
+// LOGS
+// ==========================================
+
+console.log(
+  `New ${kpi.status} alert created for ${kpi.kpi_name}`
+);
+
+console.log(
+  `Risk Score: ${aiAnalysis.riskScore}/100`
+);
+
+console.log(
+  `Risk Level: ${aiAnalysis.riskLevel}`
+);
+
+console.log(
+  `Deviation: ${aiAnalysis.deviationText}`
+);
       // ==========================================
       // SMART ROUTING
       // ==========================================
@@ -1126,6 +1204,74 @@ app.get("/api/alerts", async (req, res) => {
 
     res.status(500).json({
       error: "Failed to fetch alerts",
+    });
+  }
+});
+// ==========================================
+// GET ALERT DETAILS
+// ==========================================
+
+app.get("/api/alerts/:id/details", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Fetch alert information
+    const alertResult = await pool.query(
+      `
+      SELECT
+        a.*,
+        k.name AS kpi_name,
+        d.name AS department
+      FROM alerts a
+      JOIN kpis k
+        ON a.kpi_id = k.id
+      JOIN departments d
+        ON k.department_id = d.id
+      WHERE a.id = $1
+      `,
+      [id]
+    );
+
+    if (alertResult.rows.length === 0) {
+      return res.status(404).json({
+        error: "Alert not found",
+      });
+    }
+
+    // Fetch notification history
+    const notificationResult = await pool.query(
+      `
+      SELECT
+        id,
+        recipient,
+        channel,
+        status,
+        retry_count,
+        max_retries,
+        escalation_level,
+        error_message,
+        sent_at,
+        last_retry_at,
+        next_retry_at
+      FROM notification_logs
+      WHERE alert_id = $1
+      ORDER BY escalation_level ASC, sent_at ASC
+      `,
+      [id]
+    );
+
+    res.json({
+      alert: alertResult.rows[0],
+      notificationHistory: notificationResult.rows,
+    });
+  } catch (error) {
+    console.error(
+      "Error fetching alert details:",
+      error
+    );
+
+    res.status(500).json({
+      error: "Failed to fetch alert details",
     });
   }
 });
@@ -1471,7 +1617,7 @@ app.get(
             ON a.kpi_id = k.id
           JOIN departments d
             ON k.department_id = d.id
-          ORDER BY nl.sent_at DESC
+          ORDER BY CASE WHEN nl.status = 'FAILED' THEN 0 ELSE 1 END, nl.sent_at DESC
         `);
 
       res.json(result.rows);
@@ -1488,7 +1634,37 @@ app.get(
     }
   }
 );
+// ==========================================
+// GET NOTIFICATION ROUTES
+// ==========================================
 
+app.get("/api/notification-routes", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        nr.id,
+        nr.department_id,
+        d.name AS department,
+        nr.severity,
+        nr.recipient,
+        nr.channel,
+        nr.is_active,
+        nr.created_at
+      FROM notification_routes nr
+      JOIN departments d
+        ON nr.department_id = d.id
+      ORDER BY nr.department_id, nr.severity
+    `);
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching notification routes:", error);
+
+    res.status(500).json({
+      error: "Failed to fetch notification routes",
+    });
+  }
+});
 // ==========================================
 // GET ESCALATION RULES
 // ==========================================
@@ -1794,7 +1970,7 @@ app.use(
 const PORT =
   process.env.PORT || 5000;
 
-const server = app.listen(
+const server = httpServer.listen(
   PORT,
   () => {
     console.log(

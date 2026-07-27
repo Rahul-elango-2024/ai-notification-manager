@@ -7,16 +7,22 @@ const nodemailer = require("nodemailer");
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
-  secure: false,
+  secure: false, // Use STARTTLS
 
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_APP_PASSWORD,
   },
 
-  connectionTimeout: 15000,
-  greetingTimeout: 15000,
-  socketTimeout: 20000,
+  requireTLS: true,
+
+  tls: {
+    rejectUnauthorized: false,
+  },
+
+  connectionTimeout: 30000,
+  greetingTimeout: 30000,
+  socketTimeout: 30000,
 });
 
 // ============================================
@@ -27,16 +33,17 @@ async function verifyEmailConnection() {
   try {
     await transporter.verify();
 
-    console.log(
-      "Email service connected successfully"
-    );
+    console.log("=======================================");
+    console.log("✅ Email service connected successfully");
+    console.log(`📧 Gmail Account: ${process.env.EMAIL_USER}`);
+    console.log("=======================================");
 
     return true;
   } catch (error) {
-    console.error(
-      "Email service connection failed:",
-      error.message
-    );
+    console.error("=======================================");
+    console.error("❌ Email service connection failed");
+    console.error(error);
+    console.error("=======================================");
 
     return false;
   }
@@ -46,32 +53,38 @@ async function verifyEmailConnection() {
 // SEND EMAIL
 // ============================================
 
-async function sendEmail(to, subject, text) {
+async function sendEmail(to, subject, text, html = null) {
   try {
     if (!to) {
-      throw new Error(
-        "Recipient email address is required"
-      );
+      throw new Error("Recipient email address is required.");
     }
 
-    const info = await transporter.sendMail({
+    const mailOptions = {
       from: `"AI Notification Manager" <${process.env.EMAIL_USER}>`,
       to,
       subject,
       text,
-    });
+    };
 
-    console.log(
-      `Email sent successfully to ${to}:`,
-      info.messageId
-    );
+    if (html) {
+      mailOptions.html = html;
+    }
+
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log("=======================================");
+    console.log("✅ Email Sent Successfully");
+    console.log(`To        : ${to}`);
+    console.log(`Subject   : ${subject}`);
+    console.log(`Message ID: ${info.messageId}`);
+    console.log("=======================================");
 
     return info;
   } catch (error) {
-    console.error(
-      `Email sending failed for ${to}:`,
-      error.message
-    );
+    console.error("=======================================");
+    console.error(`❌ Failed to send email to ${to}`);
+    console.error(error);
+    console.error("=======================================");
 
     throw error;
   }
@@ -81,10 +94,8 @@ async function sendEmail(to, subject, text) {
 // WAIT HELPER
 // ============================================
 
-function wait(milliseconds) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, milliseconds);
-  });
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 // ============================================
@@ -100,26 +111,22 @@ async function sendEmailWithRetry(
   const {
     maxRetries = 3,
     retryDelay = 5000,
+    html = null,
   } = options;
 
   let lastError = null;
 
-  for (
-    let attempt = 0;
-    attempt <= maxRetries;
-    attempt++
-  ) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       console.log(
-        `Email attempt ${attempt + 1}/${
-          maxRetries + 1
-        } for ${to}`
+        `📨 Email Attempt ${attempt + 1}/${maxRetries + 1} -> ${to}`
       );
 
       const info = await sendEmail(
         to,
         subject,
-        text
+        text,
+        html
       );
 
       return {
@@ -133,17 +140,12 @@ async function sendEmailWithRetry(
       lastError = error;
 
       console.error(
-        `Email attempt ${
-          attempt + 1
-        } failed for ${to}:`,
-        error.message
+        `❌ Attempt ${attempt + 1} failed: ${error.message}`
       );
 
       if (attempt < maxRetries) {
         console.log(
-          `Retrying email in ${
-            retryDelay / 1000
-          } seconds...`
+          `⏳ Retrying in ${retryDelay / 1000} seconds...\n`
         );
 
         await wait(retryDelay);
@@ -151,14 +153,17 @@ async function sendEmailWithRetry(
     }
   }
 
+  console.error("=======================================");
+  console.error("❌ Email delivery failed after retries");
+  console.error(lastError);
+  console.error("=======================================");
+
   return {
     success: false,
     info: null,
     retryCount: maxRetries,
     attempts: maxRetries + 1,
-    error:
-      lastError?.message ||
-      "Unknown email delivery error",
+    error: lastError?.message || "Unknown error",
   };
 }
 
