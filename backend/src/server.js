@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const healthRoutes = require("./routes/healthRoutes");
 require("dotenv").config();
 
 const http = require("http");
@@ -35,7 +36,7 @@ io.on("connection", (socket) => {
 
 app.use(cors());
 app.use(express.json());
-
+app.use("/api/health", healthRoutes);
 // ==========================================
 // CONFIGURATION
 // ==========================================
@@ -1898,36 +1899,6 @@ app.delete(
       res.status(500).json({
         error:
           "Failed to delete escalation rule",
-      });
-    }
-  }
-);
-
-// ==========================================
-// HEALTH CHECK
-// ==========================================
-
-app.get(
-  "/api/health",
-  async (req, res) => {
-    try {
-      await pool.query(
-        "SELECT 1"
-      );
-
-      res.json({
-        status: "OK",
-        server: "running",
-        database: "connected",
-        timestamp:
-          new Date().toISOString(),
-      });
-    } catch (error) {
-      res.status(500).json({
-        status: "ERROR",
-        server: "running",
-        database: "disconnected",
-        error: error.message,
       });
     }
   }
