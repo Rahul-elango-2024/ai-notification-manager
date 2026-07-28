@@ -6,6 +6,7 @@ const alertRoutes = require("./routes/alertRoutes");
 const monitoringRoutes = require("./routes/monitoringRoutes");
 const kpiRoutes = require("./routes/kpiRoutes");
 const notificationRoutes = require("./routes/notificationRoutes");
+const authRoutes = require("./routes/authRoutes");
 
 
 require("dotenv").config();
@@ -31,6 +32,7 @@ app.use("/api", alertRoutes);
 app.use("/api", monitoringRoutes);
 app.use("/api", kpiRoutes);
 app.use("/api", notificationRoutes);
+app.use("/api/auth", authRoutes);
 // ==========================================
 // CONFIGURATION
 // ==========================================
