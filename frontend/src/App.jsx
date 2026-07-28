@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import { io } from "socket.io-client";
 import "./App.css";
-
+import Login from "./pages/Login";
+import { authService } from "./services/authService";
 const API_URL = "http://localhost:5000";
 
 const socket = io(API_URL);
@@ -37,6 +38,8 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
+  const [showLogin, setShowLogin] = useState(!authService.getToken());
+  const [checkingSession, setCheckingSession] = useState(!!authService.getToken());
   const [activePage, setActivePage] = useState("overview");
 
   const [kpis, setKpis] = useState([]);
@@ -653,10 +656,28 @@ const openAlertsPage = (alertId = null) => {
 };
 
 // ==========================================
-// INITIAL DATA LOAD
+// INITIAL DATA LOAD & SESSION
 // ==========================================
 useEffect(() => {
-  fetchData();
+  const initApp = async () => {
+    const token = authService.getToken();
+    if (token) {
+      try {
+        await authService.verifySession(token);
+        setShowLogin(false);
+      } catch (error) {
+        console.error("Session verification failed:", error);
+        authService.clearSession();
+        setShowLogin(true);
+      }
+    } else {
+      setShowLogin(true);
+    }
+    setCheckingSession(false);
+    fetchData();
+  };
+  
+  initApp();
 }, []);
 
 // ==========================================
@@ -716,8 +737,28 @@ useEffect(() => {
 }, [selectedAlertId]);
 
 // ==========================================
-// LOADING SCREEN
+// RENDER LOGIN SCREEN
 // ==========================================
+if (checkingSession) {
+  return (
+    <div className="loading-screen">
+      Verifying session...
+    </div>
+  );
+}
+
+if (showLogin) {
+  return <Login onLoginSuccess={() => setShowLogin(false)} />;
+}
+
+// ==========================================
+// LOGOUT HANDLER
+// ==========================================
+const handleLogout = () => {
+  authService.clearSession();
+  setShowLogin(true);
+};
+
 if (loading) {
   return (
     <div className="loading-screen">
@@ -1729,6 +1770,15 @@ const renderNotifications = () => (
               setActivePage("routing")
             }
           />
+          
+          <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+            <NavButton
+              active={false}
+              icon="⎋"
+              label="Logout"
+              onClick={handleLogout}
+            />
+          </div>
         </nav>
 
         <div className="sidebar-footer">
