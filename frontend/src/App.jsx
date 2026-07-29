@@ -4,6 +4,24 @@ import { io } from "socket.io-client";
 import "./App.css";
 import Login from "./pages/Login";
 import { authService } from "./services/authService";
+import UsersPage from "./pages/UsersPage";
+import ApiHubPage from "./pages/ApiHub/ApiHubPage";
+import PredictiveAnalyticsPage from "./pages/PredictiveAnalytics/PredictiveAnalyticsPage";
+import SimulationCenterPage from "./pages/SimulationCenter/SimulationCenterPage";
+import ProfilePage from "./pages/Profile/ProfilePage";
+import SettingsPage from "./pages/Settings/SettingsPage";
+import {
+  canUpdateKPIs,
+  canResolveAlerts,
+  canAcknowledgeAlerts,
+  canManageRoutes,
+  canManageUsers,
+  canManageApiHub,
+  canAccessPredictiveAnalytics,
+  canAccessSimulationCenter,
+  canAccessProfile,
+  canAccessSettings,
+} from "./services/permissionService";
 const API_URL = "http://localhost:5000";
 
 const socket = io(API_URL);
@@ -23,13 +41,19 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: 20, background: "red", color: "white" }}>
-          <h2>Something went wrong in AlertDetail.</h2>
-          <details style={{ whiteSpace: "pre-wrap" }}>
+        <div className="panel" style={{ padding: 24, margin: 20 }}>
+          <div style={{ color: "#ef4444", fontSize: "1.2rem", fontWeight: "bold", marginBottom: 8 }}>
+            ⚠️ Module Rendering Error
+          </div>
+          <p style={{ color: "#94a3b8", marginBottom: 16 }}>
+            An unexpected error occurred while rendering this page component. You can navigate to other pages using the sidebar.
+          </p>
+          <details style={{ whiteSpace: "pre-wrap", background: "#0f172a", padding: 12, borderRadius: 6, color: "#cbd5e1", fontSize: "0.85rem", marginBottom: 16 }}>
             {this.state.error && this.state.error.toString()}
-            <br />
-            {this.state.errorInfo && this.state.errorInfo.componentStack}
           </details>
+          <button className="primary-button blue" onClick={() => this.setState({ hasError: false })}>
+            ↻ Retry Component
+          </button>
         </div>
       );
     }
@@ -1159,6 +1183,7 @@ if (loading) {
               <strong>{kpi.source || "Unknown"}</strong>
             </div>
 
+            {canUpdateKPIs() && (
             <div className="kpi-update-form">
               <label>Update KPI Value</label>
 
@@ -1189,6 +1214,7 @@ if (loading) {
                 </button>
               </div>
             </div>
+            )}
           </div>
         ))}
       </div>
@@ -1700,12 +1726,82 @@ const renderNotifications = () => (
     </>
   );
 
+  // ==========================================
+  // USERS PAGE
+  // ==========================================
+  const renderUsers = () => {
+    if (!canManageUsers()) {
+      return <AccessDenied onBack={() => setActivePage("overview")} />;
+    }
+    return <UsersPage />;
+  };
+
+  // ==========================================
+  // ROUTING PAGE GUARD
+  // ==========================================
+  const renderRoutingGuarded = () => {
+    if (!canManageRoutes()) {
+      return <AccessDenied onBack={() => setActivePage("overview")} />;
+    }
+    return renderRouting();
+  };
+
+  // ==========================================
+  // API HUB PAGE
+  // ==========================================
+  const renderApiHub = () => {
+    if (!canManageApiHub()) {
+      return <AccessDenied onBack={() => setActivePage("overview")} />;
+    }
+    return <ApiHubPage />;
+  };
+
+  // ==========================================
+  // PREDICTIVE ANALYTICS PAGE
+  // ==========================================
+  const renderPredictiveAnalytics = () => {
+    if (!canAccessPredictiveAnalytics()) {
+      return <AccessDenied onBack={() => setActivePage("overview")} />;
+    }
+    return <PredictiveAnalyticsPage />;
+  };
+
+  // ==========================================
+  // SIMULATION CENTER PAGE
+  // ==========================================
+  const renderSimulationCenter = () => {
+    if (!canAccessSimulationCenter()) {
+      return <AccessDenied onBack={() => setActivePage("overview")} />;
+    }
+    return <SimulationCenterPage />;
+  };
+
+  // ==========================================
+  // PROFILE PAGE
+  // ==========================================
+  const renderProfile = () => {
+    return <ProfilePage />;
+  };
+
+  // ==========================================
+  // SETTINGS PAGE
+  // ==========================================
+  const renderSettings = () => {
+    return <SettingsPage />;
+  };
+
   const pages = {
     overview: renderOverview,
     kpis: renderKpis,
     alerts: renderAlerts,
     notifications: renderNotifications,
-    routing: renderRouting,
+    routing: renderRoutingGuarded,
+    users: renderUsers,
+    "api-hub": renderApiHub,
+    "predictive-analytics": renderPredictiveAnalytics,
+    "simulation-center": renderSimulationCenter,
+    profile: renderProfile,
+    settings: renderSettings,
   };
 
   return (
@@ -1762,6 +1858,7 @@ const renderNotifications = () => (
             }
           />
 
+          {canManageRoutes() && (
           <NavButton
             active={activePage === "routing"}
             icon="⇄"
@@ -1770,8 +1867,71 @@ const renderNotifications = () => (
               setActivePage("routing")
             }
           />
+          )}
+
+          {canManageUsers() && (
+          <NavButton
+            active={activePage === "users"}
+            icon="👤"
+            label="Users"
+            onClick={() =>
+              setActivePage("users")
+            }
+          />
+          )}
+
+          {canManageApiHub() && (
+          <NavButton
+            active={activePage === "api-hub"}
+            icon="🔌"
+            label="API Hub"
+            onClick={() =>
+              setActivePage("api-hub")
+            }
+          />
+          )}
+
+          {canAccessPredictiveAnalytics() && (
+          <NavButton
+            active={activePage === "predictive-analytics"}
+            icon="📈"
+            label="Predictive Analytics"
+            onClick={() =>
+              setActivePage("predictive-analytics")
+            }
+          />
+          )}
+
+          {canAccessSimulationCenter() && (
+          <NavButton
+            active={activePage === "simulation-center"}
+            icon="🕹"
+            label="Simulation Center"
+            onClick={() =>
+              setActivePage("simulation-center")
+            }
+          />
+          )}
           
           <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
+            <NavButton
+              active={activePage === "profile"}
+              icon="👤"
+              label="Profile"
+              onClick={() =>
+                setActivePage("profile")
+              }
+            />
+
+            <NavButton
+              active={activePage === "settings"}
+              icon="⚙"
+              label="Settings"
+              onClick={() =>
+                setActivePage("settings")
+              }
+            />
+
             <NavButton
               active={false}
               icon="⎋"
@@ -1817,7 +1977,9 @@ const renderNotifications = () => (
         </div>
 
         <div className="page-content">
-          {pages[activePage]()}
+          <ErrorBoundary key={activePage}>
+            {pages[activePage]()}
+          </ErrorBoundary>
         </div>
       </main>
     </div>
@@ -1827,6 +1989,32 @@ const renderNotifications = () => (
 // ==========================================
 // REUSABLE COMPONENTS
 // ==========================================
+
+// ==========================================
+// ACCESS DENIED COMPONENT
+// ==========================================
+
+function AccessDenied({ onBack }) {
+  return (
+    <div className="access-denied-page">
+      <div className="access-denied-icon">
+        🔒
+      </div>
+      <div className="access-denied-eyebrow">ACCESS RESTRICTED</div>
+      <h2>Access Denied</h2>
+      <p>
+        You do not have the required permissions to view this page.
+        Please contact your administrator if you believe this is an error.
+      </p>
+      <button
+        className="primary-button"
+        onClick={onBack}
+      >
+        Return to Dashboard
+      </button>
+    </div>
+  );
+}
 
 function NavButton({
   active,
@@ -2102,7 +2290,7 @@ function AlertDetail({
         </div>
 
         <div className="alert-action-buttons">
-          {!alert.is_acknowledged &&
+          {canAcknowledgeAlerts() && !alert.is_acknowledged &&
             !alert.is_resolved && (
               <button
                 className="acknowledge-button"
@@ -2121,7 +2309,7 @@ function AlertDetail({
               </button>
             )}
 
-         {!alert.is_resolved &&
+         {canResolveAlerts() && !alert.is_resolved &&
   alert.is_acknowledged && (
     <button
       className="resolve-button"

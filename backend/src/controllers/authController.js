@@ -1,7 +1,7 @@
 const authService = require("../services/authService");
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const validRoles = ["Admin", "Manager", "Employee"];
+const validRoles = ["Admin", "Manager", "Employee", "Viewer"];
 
 exports.register = async (req, res) => {
   try {
@@ -32,7 +32,7 @@ exports.register = async (req, res) => {
 
     // Validation: Role values
     if (!validRoles.includes(role)) {
-      return res.status(400).json({ error: "Invalid role. Allowed roles are: Admin, Manager, Employee." });
+      return res.status(400).json({ error: "Invalid role. Allowed roles are: Admin, Manager, Employee, Viewer." });
     }
 
     const user = await authService.registerUser({

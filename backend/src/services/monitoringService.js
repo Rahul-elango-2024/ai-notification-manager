@@ -3,12 +3,18 @@ const { autoResolveAlert, startEscalation } = require("./escalationService");
 const { generateAIAnalysis } = require("../aiService");
 const { sendEmailWithRetry } = require("../emailService");
 const { getIo } = require("../socket/index");
+const predictionService = require("./predictionService");
 
 const MAX_EMAIL_RETRIES = 3;
 const EMAIL_RETRY_DELAY = 5000;
 
 const processMonitoring = async () => {
   try {
+    // Invalidate prediction cache so forecast model updates with fresh data
+    if (predictionService && predictionService.invalidateCache) {
+      predictionService.invalidateCache();
+    }
+
     const result = await pool.query(`
       SELECT
         k.id,
@@ -32,384 +38,247 @@ const processMonitoring = async () => {
           recorded_at
         FROM kpi_readings
         WHERE kpi_id = k.id
-        ORDER BY recorded_at DESC
+        ORDER BY recorded_at DESC, id DESC
         LIMIT 1
       ) kr ON true
       ORDER BY k.id
     `);
 
-    const monitoringData =
-      result.rows.map((kpi) => {
-        const current =
-          Number(kpi.current_value);
+    const monitoringData = result.rows.map((kpi) => {
+      const current = Number(kpi.current_value);
+      const target = Number(kpi.target_value);
+      const warning = Number(kpi.warning_threshold);
+      const critical = Number(kpi.critical_threshold);
 
-        const target =
-          Number(kpi.target_value);
+      let status = "NORMAL";
 
-        const warning =
-          Number(kpi.warning_threshold);
-
-        const critical =
-          Number(kpi.critical_threshold);
-
-        let status = "NORMAL";
-
-        // Higher value is better.
-        if (
-          target > warning &&
-          warning > critical
-        ) {
-          if (current <= critical) {
-            status = "CRITICAL";
-          } else if (current <= warning) {
-            status = "WARNING";
-          }
+      // HIGHER IS BETTER (warning >= critical, e.g., Sales Revenue: warning 800k, critical 600k)
+      if (warning >= critical) {
+        if (current <= critical) {
+          status = "CRITICAL";
+        } else if (current <= warning) {
+          status = "WARNING";
         }
-
-        // Lower value is better.
-        else if (
-          target < warning &&
-          warning < critical
-        ) {
-          if (current >= critical) {
-            status = "CRITICAL";
-          } else if (current >= warning) {
-            status = "WARNING";
-          }
+      }
+      // LOWER IS BETTER (warning < critical, e.g., Operating Expenses: warning 600k, critical 750k)
+      else {
+        if (current >= critical) {
+          status = "CRITICAL";
+        } else if (current >= warning) {
+          status = "WARNING";
         }
+      }
 
-        return {
-          ...kpi,
-          status,
-        };
-      });
-// ==========================================
-// CREATE ALERTS AND SEND NOTIFICATIONS
-// ==========================================
+      return {
+        ...kpi,
+        status,
+      };
+    });
 
-for (const kpi of monitoringData) {
+    // Broadcast real-time KPI monitoring updates to connected clients
+    try {
+      const io = getIo();
+      if (io) {
+        io.emit("monitoringUpdated", monitoringData);
+      }
+    } catch (err) {
+      // Socket not ready
+    }
 
-  if (kpi.status === "NORMAL") {
-    await autoResolveAlert(kpi);
-    continue;
-  }
+    // ==========================================
+    // CREATE ALERTS AND SEND NOTIFICATIONS
+    // ==========================================
 
-  if (
-    kpi.status !== "WARNING" &&
-    kpi.status !== "CRITICAL"
-  ) {
-    continue;
-  }
+    for (const kpi of monitoringData) {
+      if (kpi.status === "NORMAL") {
+        await autoResolveAlert(kpi);
+        continue;
+      }
 
- // ==========================================
-// CHECK EXISTING ACTIVE ALERT
-// ==========================================
+      if (kpi.status !== "WARNING" && kpi.status !== "CRITICAL") {
+        continue;
+      }
 
-const existingAlert =
-  await pool.query(
-    `
-    SELECT id
-    FROM alerts
-    WHERE kpi_id = $1
-      AND status = $2
-      AND is_resolved = FALSE
-    LIMIT 1
-    `,
-    [
-      kpi.id,
-      kpi.status,
-    ]
-  );
+      // Automatically resolve any previous active alert of a DIFFERENT severity (e.g. WARNING superseded by CRITICAL)
+      await pool.query(
+        `
+        UPDATE alerts
+        SET is_resolved = TRUE,
+            resolved_at = CURRENT_TIMESTAMP,
+            resolved_by = 'SYSTEM',
+            resolution_note = 'Superseded: KPI status transitioned to ' || $2
+        WHERE kpi_id = $1
+          AND is_resolved = FALSE
+          AND status != $2
+        `,
+        [kpi.id, kpi.status]
+      ).catch(() => {});
 
-if (
-  existingAlert.rows.length > 0
-) {
-  continue;
-}
+      // Check for existing active alert of SAME severity
+      const existingAlert = await pool.query(
+        `
+        SELECT id
+        FROM alerts
+        WHERE kpi_id = $1
+          AND status = $2
+          AND is_resolved = FALSE
+        LIMIT 1
+        `,
+        [kpi.id, kpi.status]
+      );
 
-// ==========================================
-// GENERATE AI ANALYSIS
-// ==========================================
-
-const aiAnalysis =
-  generateAIAnalysis(
-    kpi,
-    kpi.status
-  );
-
-console.log(
-  `AI analysis generated for ${kpi.kpi_name}`
-);
-
-const message =
-  `${aiAnalysis.summary}\n\n` +
-  `${aiAnalysis.analysis}\n\n` +
-  `Recommendation: ${aiAnalysis.recommendation}`;
-
-// ==========================================
-// CREATE ALERT WITH DUPLICATE PROTECTION
-// ==========================================
-
-const newAlert =
-  await pool.query(
-    `
-    INSERT INTO alerts
-    (
-      kpi_id,
-      status,
-      message,
-      current_value,
-      risk_score,
-      risk_level,
-      deviation_percentage,
-      deviation_direction,
-      impact_summary,
-      possible_causes,
-      recommended_actions,
-      ai_timeline,
-      ai_generated_at,
-      escalation_level,
-      escalation_status
-    )
-    VALUES
-    (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      $6,
-      $7,
-      $8,
-      $9,
-      $10::jsonb,
-      $11::jsonb,
-      $12::jsonb,
-      $13,
-      0,
-      'NOT_ESCALATED'
-    )
-    ON CONFLICT (kpi_id, status)
-    WHERE is_resolved = FALSE
-    DO NOTHING
-    RETURNING *
-    `,
-    [
-      kpi.id,
-      kpi.status,
-      message,
-      kpi.current_value,
-      aiAnalysis.riskScore,
-      aiAnalysis.riskLevel,
-      aiAnalysis.deviationPercentage,
-      aiAnalysis.deviationDirection,
-      aiAnalysis.impactSummary,
-      JSON.stringify(
-        aiAnalysis.possibleCauses || []
-      ),
-      JSON.stringify(
-        aiAnalysis.recommendedActions || []
-      ),
-      JSON.stringify(
-        aiAnalysis.timeline || []
-      ),
-      aiAnalysis.generatedAt,
-    ]
-  );
-
-if (
-  newAlert.rows.length === 0
-) {
-  console.log(
-    `Duplicate active ${kpi.status} alert prevented for ${kpi.kpi_name}`
-  );
-  continue;
-}
-
-const alertId =
-  newAlert.rows[0].id;
-
-// ==========================================
-// SOCKET.IO REAL-TIME NOTIFICATION
-// ==========================================
-
-const io = getIo();
-
-io.emit("newAlert", {
-  id: alertId,
-  kpi_name: kpi.kpi_name,
-  department: kpi.department,
-  status: kpi.status,
-  current_value: kpi.current_value,
-});
-
-// ==========================================
-// LOGS
-// ==========================================
-
-console.log(
-  `New ${kpi.status} alert created for ${kpi.kpi_name}`
-);
-
-console.log(
-  `Risk Score: ${aiAnalysis.riskScore}/100`
-);
-
-console.log(
-  `Risk Level: ${aiAnalysis.riskLevel}`
-);
-
-console.log(
-  `Deviation: ${aiAnalysis.deviationText}`
-);
-      // ==========================================
-      // SMART ROUTING
-      // ==========================================
-
-      const routes =
-        await pool.query(
-          `
-          SELECT
-            id,
-            recipient,
-            severity,
-            channel
-          FROM notification_routes
-          WHERE department_id = $1
-            AND severity = $2
-            AND channel = 'EMAIL'
-            AND is_active = TRUE
-          ORDER BY id
-          `,
-          [
-            kpi.department_id,
-            kpi.status,
-          ]
-        );
-
-      if (
-        routes.rows.length === 0
-      ) {
-        console.log(
-          `No active email notification route found for ${kpi.department} - ${kpi.status}`
-        );
+      if (existingAlert.rows.length > 0) {
         continue;
       }
 
       // ==========================================
-      // BUILD EMAIL CONTENT
+      // GENERATE AI ANALYSIS
       // ==========================================
 
-      const emailSubject =
-        `${kpi.status} Alert - ${kpi.kpi_name}`;
+      const aiAnalysis = generateAIAnalysis(kpi, kpi.status);
 
-      const possibleCausesText =
-        aiAnalysis.possibleCauses &&
-        aiAnalysis.possibleCauses.length > 0
-          ? aiAnalysis.possibleCauses
-              .map(
-                (cause, index) =>
-                  `${index + 1}. ${cause}`
-              )
-              .join("\n")
-          : "No specific causes identified.";
+      console.log(`AI analysis generated for ${kpi.kpi_name}`);
 
-      const recommendedActionsText =
-        aiAnalysis.recommendedActions &&
-        aiAnalysis.recommendedActions.length > 0
-          ? aiAnalysis.recommendedActions
-              .map(
-                (action, index) =>
-                  `${index + 1}. ${action}`
-              )
-              .join("\n")
-          : aiAnalysis.recommendation;
-
-      const emailBody = `
-AI NOTIFICATION MANAGER
-============================================
-
-${kpi.status} ALERT
-
-KPI:
-${kpi.kpi_name}
-
-Department:
-${kpi.department}
-
-Current Value:
-${kpi.current_value} ${kpi.unit}
-
-Target Value:
-${kpi.target_value} ${kpi.unit}
-
-Warning Threshold:
-${kpi.warning_threshold} ${kpi.unit}
-
-Alert ID:
-${alertId}
-
-============================================
-AI RISK ASSESSMENT
-============================================
-
-Risk Score:
-${aiAnalysis.riskScore}/100
-
-Risk Level:
-${aiAnalysis.riskLevel}
-
-Deviation:
-${aiAnalysis.deviationText}
-
-Impact:
-${aiAnalysis.impactSummary}
-
-============================================
-POSSIBLE CAUSES
-============================================
-
-${possibleCausesText}
-
-============================================
-RECOMMENDED ACTIONS
-============================================
-
-${recommendedActionsText}
-
-============================================
-
-This notification was automatically generated
-by the AI Notification Manager.
-`;
+      const message =
+        `${aiAnalysis.summary}\n\n` +
+        `${aiAnalysis.analysis}\n\n` +
+        `Recommendation: ${aiAnalysis.recommendation}`;
 
       // ==========================================
-      // SEND NOTIFICATIONS
+      // CREATE ALERT WITH DUPLICATE PROTECTION
       // ==========================================
+
+      const newAlert = await pool.query(
+        `
+        INSERT INTO alerts
+        (
+          kpi_id,
+          status,
+          message,
+          current_value,
+          risk_score,
+          risk_level,
+          deviation_percentage,
+          deviation_direction,
+          impact_summary,
+          possible_causes,
+          recommended_actions,
+          ai_timeline,
+          ai_generated_at,
+          escalation_level,
+          escalation_status
+        )
+        VALUES
+        (
+          $1,
+          $2,
+          $3,
+          $4,
+          $5,
+          $6,
+          $7,
+          $8,
+          $9,
+          $10::jsonb,
+          $11::jsonb,
+          $12::jsonb,
+          $13,
+          0,
+          'NOT_ESCALATED'
+        )
+        ON CONFLICT (kpi_id, status)
+        WHERE is_resolved = FALSE
+        DO NOTHING
+        RETURNING *
+        `,
+        [
+          kpi.id,
+          kpi.status,
+          message,
+          kpi.current_value,
+          aiAnalysis.riskScore,
+          aiAnalysis.riskLevel,
+          aiAnalysis.deviationPercentage,
+          aiAnalysis.deviationDirection,
+          aiAnalysis.impactSummary,
+          JSON.stringify(aiAnalysis.possibleCauses || []),
+          JSON.stringify(aiAnalysis.recommendedActions || []),
+          JSON.stringify(aiAnalysis.timeline || []),
+          aiAnalysis.generatedAt,
+        ]
+      );
+
+      if (newAlert.rows.length === 0) {
+        console.log(`Duplicate active ${kpi.status} alert prevented for ${kpi.kpi_name}`);
+        continue;
+      }
+
+      const alertId = newAlert.rows[0].id;
+
+      // ==========================================
+      // SOCKET.IO REAL-TIME NOTIFICATION
+      // ==========================================
+      try {
+        const io = getIo();
+        if (io) {
+          io.emit("newAlert", {
+            id: alertId,
+            kpi_name: kpi.kpi_name,
+            department: kpi.department,
+            status: kpi.status,
+            current_value: kpi.current_value,
+          });
+        }
+      } catch (err) {
+        // Socket offline
+      }
+
+      console.log(`New ${kpi.status} alert created for ${kpi.kpi_name}`);
+      console.log(`Risk Score: ${aiAnalysis.riskScore}/100`);
+      console.log(`Risk Level: ${aiAnalysis.riskLevel}`);
+      console.log(`Deviation: ${aiAnalysis.deviationText}`);
+
+      // ==========================================
+      // SMART ROUTING
+      // ==========================================
+
+      const routes = await pool.query(
+        `
+        SELECT
+          id,
+          recipient,
+          severity,
+          channel
+        FROM notification_routes
+        WHERE department_id = $1
+          AND severity = $2
+          AND channel = 'EMAIL'
+          AND is_active = TRUE
+        ORDER BY id
+        `,
+        [kpi.department_id, kpi.status]
+      );
+
+      if (routes.rows.length === 0) {
+        console.log(`No active email notification route found for ${kpi.department} - ${kpi.status}`);
+        continue;
+      }
 
       for (const route of routes.rows) {
-        console.log(
-          `Starting notification delivery to ${route.recipient}`
+        const subject = `${kpi.status} ALERT: ${kpi.kpi_name} (${kpi.department})`;
+
+        const emailResult = await sendEmailWithRetry(
+          route.recipient,
+          subject,
+          message,
+          {
+            maxRetries: MAX_EMAIL_RETRIES,
+            retryDelay: EMAIL_RETRY_DELAY,
+          }
         );
 
-        const deliveryResult =
-          await sendEmailWithRetry(
-            route.recipient,
-            emailSubject,
-            emailBody,
-            {
-              maxRetries:
-                MAX_EMAIL_RETRIES,
-
-              retryDelay:
-                EMAIL_RETRY_DELAY,
-            }
-          );
-
-        if (deliveryResult.success) {
-          console.log(
-            `Notification delivered successfully to ${route.recipient}`
-          );
+        if (emailResult.success) {
+          console.log(`Notification sent to ${route.recipient} for ${kpi.kpi_name}`);
 
           await pool.query(
             `
@@ -443,69 +312,10 @@ by the AI Notification Manager.
             [
               alertId,
               route.recipient,
-              route.channel,
+              "EMAIL",
               "SENT",
               null,
-              deliveryResult.retryCount,
-              MAX_EMAIL_RETRIES,
-              null,
-
-              deliveryResult.retryCount > 0
-                ? new Date()
-                : null,
-
-              0,
-            ]
-          );
-        } else {
-          console.error(
-            `Email delivery permanently failed for ${route.recipient}`
-          );
-
-          console.error(
-            `Attempts: ${deliveryResult.attempts}`
-          );
-
-          console.error(
-            `Error: ${deliveryResult.error}`
-          );
-
-          await pool.query(
-            `
-            INSERT INTO notification_logs
-            (
-              alert_id,
-              recipient,
-              channel,
-              status,
-              error_message,
-              retry_count,
-              max_retries,
-              next_retry_at,
-              last_retry_at,
-              escalation_level
-            )
-            VALUES
-            (
-              $1,
-              $2,
-              $3,
-              $4,
-              $5,
-              $6,
-              $7,
-              $8,
-              $9,
-              $10
-            )
-            `,
-            [
-              alertId,
-              route.recipient,
-              route.channel,
-              "FAILED",
-              deliveryResult.error,
-              deliveryResult.retryCount,
+              emailResult.retryCount,
               MAX_EMAIL_RETRIES,
               null,
               new Date(),
@@ -513,21 +323,60 @@ by the AI Notification Manager.
             ]
           );
 
-          console.log(
-            `Failed notification logged for ${route.recipient}`
-          );
-
           await startEscalation({
             alertId,
             kpi,
-            originalRecipient:
-              route.recipient,
+            originalRecipient: route.recipient,
           });
+        } else {
+          console.error(`Failed to send notification to ${route.recipient} for ${kpi.kpi_name}:`, emailResult.error);
+
+          await pool.query(
+            `
+            INSERT INTO notification_logs
+            (
+              alert_id,
+              recipient,
+              channel,
+              status,
+              error_message,
+              retry_count,
+              max_retries,
+              next_retry_at,
+              last_retry_at,
+              escalation_level
+            )
+            VALUES
+            (
+              $1,
+              $2,
+              $3,
+              $4,
+              $5,
+              $6,
+              $7,
+              $8,
+              $9,
+              $10
+            )
+            `,
+            [
+              alertId,
+              route.recipient,
+              "EMAIL",
+              "FAILED",
+              emailResult.error,
+              emailResult.retryCount,
+              MAX_EMAIL_RETRIES,
+              null,
+              new Date(),
+              0,
+            ]
+          );
         }
       }
     }
 
-    
     return monitoringData;
   } catch (error) {
     console.error("Monitoring error:", error);
@@ -536,5 +385,5 @@ by the AI Notification Manager.
 };
 
 module.exports = {
-  processMonitoring
+  processMonitoring,
 };

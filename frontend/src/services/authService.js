@@ -72,5 +72,16 @@ export const authService = {
     } catch {
       return null;
     }
+  },
+
+  getUserRole: () => {
+    const userStr = localStorage.getItem("user");
+    if (!userStr) return null;
+    try {
+      const user = JSON.parse(userStr);
+      return user ? user.role : null;
+    } catch {
+      return null;
+    }
   }
 };

@@ -64,10 +64,16 @@ exports.addKpiReading = async (req, res) => {
 
     console.log(`New KPI reading added: ${kpiResult.rows[0].name} = ${numericValue}`);
 
+    // Immediately execute threshold evaluation, alert generation/resolution, and Socket.IO broadcast
+    const monitoringService = require("../services/monitoringService");
+    const updatedMonitoring = await monitoringService.processMonitoring();
+    const updatedKpi = updatedMonitoring ? updatedMonitoring.find((k) => String(k.id) === String(kpiId)) : null;
+
     res.status(201).json({
       success: true,
       message: "KPI value updated successfully",
       reading: result.rows[0],
+      kpi: updatedKpi,
     });
   } catch (error) {
     console.error("Error adding KPI reading:", error);
