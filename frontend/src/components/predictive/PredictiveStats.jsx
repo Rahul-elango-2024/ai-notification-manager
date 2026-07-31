@@ -24,31 +24,31 @@ function useAnimatedCounter(targetValue, duration = 800) {
 }
 
 const PredictiveStats = memo(function PredictiveStats({ overview = {} }) {
-  const riskScore = overview.overallRiskScore || 78;
+  const systemHealth = overview.systemHealthScore || 94.4;
   const predictedIncidents = overview.predictedCriticalAlerts || 4;
   const predictedSlaBreaches = overview.predictedSlaBreaches || 2;
-  const systemHealth = overview.systemHealthScore || 91.4;
-  const confidenceScore = overview.aiConfidenceScore || 94.8;
+  const businessRisk = overview.overallRiskScore || 78;
+  const confidenceScore = overview.aiConfidenceScore || 96.8;
 
-  const animRisk = useAnimatedCounter(riskScore);
+  const animHealth = useAnimatedCounter(Math.floor(systemHealth));
   const animIncidents = useAnimatedCounter(predictedIncidents);
   const animBreaches = useAnimatedCounter(predictedSlaBreaches);
-  const animHealth = useAnimatedCounter(Math.floor(systemHealth));
+  const animRisk = useAnimatedCounter(businessRisk);
   const animConfidence = useAnimatedCounter(Math.floor(confidenceScore));
 
   return (
-    <div className="incident-stats-grid predictive-stats-grid" role="region" aria-label="AI Predictive KPI Overview Cards">
-      {/* 1. Risk Score Card */}
-      <div className="inc-stat-card card-critical accent-red glow-red">
+    <div className="incident-stats-grid predictive-stats-grid executive-kpi-6-grid" role="region" aria-label="Executive AI KPI Overview Cards">
+      {/* 1. AI Health Score */}
+      <div className="inc-stat-card card-resolved accent-emerald glow-emerald">
         <div className="stat-header">
-          <span className="stat-label">AI Risk Score</span>
-          <div className="stat-icon icon-red-large">🧠</div>
+          <span className="stat-label">AI Health Score</span>
+          <div className="stat-icon icon-emerald-large">❤️</div>
         </div>
         <div className="stat-value-group">
-          <span className="stat-number">{animRisk}<small className="stat-unit">/100</small></span>
-          <span className="stat-trend badge-urgent">High Risk</span>
+          <span className="stat-number">{animHealth}.4%</span>
+          <span className="stat-trend badge-success">Optimal</span>
         </div>
-        <span className="stat-subtext">Composite enterprise anomaly score</span>
+        <span className="stat-subtext">Aggregated telemetry health</span>
       </div>
 
       {/* 2. Predicted Incidents (24h) */}
@@ -74,33 +74,46 @@ const PredictiveStats = memo(function PredictiveStats({ overview = {} }) {
           <span className="stat-number">{animBreaches}</span>
           <span className="stat-trend badge-critical">Attention Needed</span>
         </div>
-        <span className="stat-subtext">Potential SLA target violations</span>
+        <span className="stat-subtext">Target SLA risk threshold</span>
       </div>
 
-      {/* 4. System Health Score */}
-      <div className="inc-stat-card card-resolved accent-emerald glow-emerald">
+      {/* 4. Predicted Business Risk */}
+      <div className="inc-stat-card card-critical accent-red glow-red">
         <div className="stat-header">
-          <span className="stat-label">System Health Score</span>
-          <div className="stat-icon icon-emerald-large">❤️</div>
+          <span className="stat-label">Predicted Business Risk</span>
+          <div className="stat-icon icon-red-large">🧠</div>
         </div>
         <div className="stat-value-group">
-          <span className="stat-number">{animHealth}.4%</span>
-          <span className="stat-trend badge-success">Optimal</span>
+          <span className="stat-number">{animRisk}<small className="stat-unit">/100</small></span>
+          <span className="stat-trend badge-urgent">High Exposure</span>
         </div>
-        <span className="stat-subtext">Aggregated telemetry health</span>
+        <span className="stat-subtext">Multi-department risk score</span>
       </div>
 
-      {/* 5. AI Model Confidence Score */}
+      {/* 5. AI Confidence Score */}
       <div className="inc-stat-card card-total accent-blue glow-blue">
         <div className="stat-header">
-          <span className="stat-label">AI Model Confidence</span>
+          <span className="stat-label">AI Confidence Score</span>
           <div className="stat-icon icon-blue-large">⚡</div>
         </div>
         <div className="stat-value-group">
           <span className="stat-number">{animConfidence}.8%</span>
-          <span className="stat-trend badge-active">Ensemble v1.2</span>
+          <span className="stat-trend badge-active">Gemini v2.4</span>
         </div>
-        <span className="stat-subtext">Statistical forecast accuracy</span>
+        <span className="stat-subtext">Statistical model accuracy</span>
+      </div>
+
+      {/* 6. Trend Direction */}
+      <div className="inc-stat-card accent-cyan glow-cyan">
+        <div className="stat-header">
+          <span className="stat-label">Trend Direction</span>
+          <div className="stat-icon icon-cyan-large">📈</div>
+        </div>
+        <div className="stat-value-group">
+          <span className="stat-number">STABLE</span>
+          <span className="stat-trend badge-success">0.4% MoM</span>
+        </div>
+        <span className="stat-subtext">7-day drift vector balance</span>
       </div>
     </div>
   );

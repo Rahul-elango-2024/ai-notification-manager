@@ -1,210 +1,99 @@
-import React, { useState, memo } from "react";
+import React, { memo, useState } from "react";
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+} from "recharts";
 
-const PredictiveCharts = memo(function PredictiveCharts({ forecasts = [] }) {
-  const [timeframe, setTimeframe] = useState("7d"); // "7d", "30d", "90d"
+const data = [
+  { date: "Jul 25", critical: 1, high: 3, medium: 4, previous: 2, pctChange: "+50%", trend: "UP", confidence: "94%" },
+  { date: "Jul 26", critical: 2, high: 4, medium: 3, previous: 3, pctChange: "+33%", trend: "UP", confidence: "96%" },
+  { date: "Jul 27", critical: 1, high: 2, medium: 5, previous: 3, pctChange: "-33%", trend: "DOWN", confidence: "98%" },
+  { date: "Jul 28", critical: 3, high: 5, medium: 2, previous: 2, pctChange: "+150%", trend: "UP", confidence: "95%" },
+  { date: "Jul 29", critical: 2, high: 3, medium: 4, previous: 4, pctChange: "-25%", trend: "DOWN", confidence: "97%" },
+  { date: "Jul 30", critical: 4, high: 6, medium: 3, previous: 3, pctChange: "+66%", trend: "UP", confidence: "92%" },
+  { date: "Jul 31", critical: 2, high: 4, medium: 2, previous: 4, pctChange: "-50%", trend: "DOWN", confidence: "99%" },
+];
 
-  // Mock forecast series generator depending on active timeframe
-  const periodMultiplier = timeframe === "7d" ? 1 : timeframe === "30d" ? 3.5 : 8;
+// Custom Hover Tooltip
+const CustomTooltip = ({ active, payload, label }) => {
+  if (active && payload && payload.length) {
+    const item = payload[0].payload;
+    return (
+      <div className="chart-hover-popover" style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", padding: "10px", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", fontSize: "12px" }}>
+        <strong style={{ color: "#111827" }}>{label} Telemetry Brief</strong>
+        <div style={{ color: "#DC2626", marginTop: "4px" }}>Critical Incidents: {item.critical}</div>
+        <div style={{ color: "#F59E0B" }}>High Priority: {item.high}</div>
+        <div style={{ color: "#2563EB" }}>Medium Level: {item.medium}</div>
+        <div style={{ borderTop: "1px solid #E5E7EB", marginTop: "6px", paddingTop: "4px", color: "#6B7280" }}>
+          Prev Day: {item.previous} ({item.pctChange} {item.trend}) | Conf: {item.confidence}
+        </div>
+      </div>
+    );
+  }
+  return null;
+};
 
-  // 1. KPI Forecast Data
-  const kpiForecastSeries = [
-    { label: "Day 1", value: 92 },
-    { label: "Day 2", value: 89 },
-    { label: "Day 3", value: 85 },
-    { label: "Day 4", value: 78 },
-    { label: "Day 5", value: 72 },
-    { label: "Day 6", value: 68 },
-    { label: "Day 7", value: 64 },
-  ];
+const PredictiveCharts = memo(function PredictiveCharts() {
+  const [chartType, setChartType] = useState("all");
 
-  // 2. Incident Prediction Trend
-  const incidentTrendSeries = [
-    { label: "Mon", count: 2 },
-    { label: "Tue", count: 3 },
-    { label: "Wed", count: 6 },
-    { label: "Thu", count: 4 },
-    { label: "Fri", count: 8 },
-    { label: "Sat", count: 3 },
-    { label: "Sun", count: 2 },
-  ];
-
-  // 3. Alert Volume Prediction
-  const alertVolumeSeries = [
-    { time: "00:00", volume: 120 },
-    { time: "04:00", volume: 180 },
-    { time: "08:00", volume: 450 },
-    { time: "12:00", volume: 890 },
-    { time: "16:00", volume: 620 },
-    { time: "20:00", volume: 310 },
-  ];
-
-  // 4. Revenue Impact Forecast ($k)
-  const revenueSeries = [
-    { name: "Payments API", current: "$450k", predictedLoss: "$35k", risk: "HIGH" },
-    { name: "Checkout Pipeline", current: "$890k", predictedLoss: "$82k", risk: "CRITICAL" },
-    { name: "Auth Service", current: "$230k", predictedLoss: "$8k", risk: "MEDIUM" },
-    { name: "Notification Engine", current: "$120k", predictedLoss: "$2k", risk: "LOW" },
-  ];
-
-  // 5. Infrastructure Load Forecast
-  const infraLoadSeries = [
-    { service: "Database Cluster", load: 88, status: "WARNING" },
-    { service: "API Gateway", load: 94, status: "CRITICAL" },
-    { service: "Redis Cache", load: 62, status: "NORMAL" },
-    { service: "RabbitMQ Queue", load: 76, status: "NORMAL" },
-  ];
+  const exportCSV = () => {
+    const headers = "Date,Critical,High,Medium,Previous,PctChange,Trend,Confidence\n";
+    const rows = data.map((d) => `${d.date},${d.critical},${d.high},${d.medium},${d.previous},${d.pctChange},${d.trend},${d.confidence}`).join("\n");
+    const blob = new Blob([headers + rows], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "predictive_telemetry_export.csv";
+    a.click();
+  };
 
   return (
-    <div className="incident-charts-section panel predictive-charts-section" role="region" aria-label="AI Forecasting Dashboards">
-      <div className="panel-header">
+    <div className="section-card trend-chart-card">
+      <div className="section-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2>AI Forecasting & Risk Projections</h2>
-          <p>Ensemble predictive models forecasting telemetry trends, incident volume, revenue impact, and server load.</p>
+          <h2 className="section-title">AI Incident & KPI Telemetry Forecast</h2>
+          <span className="caption-text">Interactive Recharts Multi-Series Trend Line</span>
         </div>
-        
-        {/* Timeframe Selector */}
-        <div className="chart-tab-selector">
-          <button
-            className={`tab-btn ${timeframe === "7d" ? "active" : ""}`}
-            onClick={() => setTimeframe("7d")}
-          >
-            7 Days
-          </button>
-          <button
-            className={`tab-btn ${timeframe === "30d" ? "active" : ""}`}
-            onClick={() => setTimeframe("30d")}
-          >
-            30 Days
-          </button>
-          <button
-            className={`tab-btn ${timeframe === "90d" ? "active" : ""}`}
-            onClick={() => setTimeframe("90d")}
-          >
-            90 Days
+        <div style={{ display: "flex", gap: "8px" }}>
+          <button className="secondary-button small-btn" onClick={exportCSV}>
+            Export CSV
           </button>
         </div>
       </div>
 
-      <div className="charts-grid-layout">
-        {/* Chart 1: KPI Forecast Line */}
-        <div className="chart-box rounded-chart-box">
-          <div className="chart-box-header">
-            <h3 className="chart-title">KPI Degradation Forecast ({timeframe})</h3>
-            <span className="chart-subtitle">Predicted average performance trajectory</span>
-          </div>
-          <div className="line-chart-container tall-line-container-220">
-            <svg className="trend-svg" viewBox="0 0 600 220" preserveAspectRatio="none">
-              <line x1="40" y1="40" x2="560" y2="40" stroke="var(--border)" strokeDasharray="4 4" opacity="0.6" />
-              <line x1="40" y1="110" x2="560" y2="110" stroke="var(--border)" strokeDasharray="4 4" opacity="0.6" />
-              <line x1="40" y1="180" x2="560" y2="180" stroke="var(--border)" strokeOpacity="0.8" />
-
-              <polyline
-                fill="none"
-                stroke="#ef4444"
-                strokeWidth="3.5"
-                points="40,50 120,70 200,95 280,130 360,155 440,170 520,185"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-
-              {kpiForecastSeries.map((item, idx) => {
-                const x = 40 + idx * 80;
-                const y = 50 + idx * 22;
-                return (
-                  <g key={idx}>
-                    <circle cx={x} cy={y} r="5" fill="#ef4444" stroke="var(--card)" strokeWidth="2" />
-                    <text x={x} y={y - 12} textAnchor="middle" fill="var(--text-primary)" fontSize="11" fontWeight="700">
-                      {Math.round(item.value / periodMultiplier)}%
-                    </text>
-                    <text x={x} y="205" textAnchor="middle" fill="var(--text-muted)" fontSize="11">
-                      {item.label}
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        </div>
-
-        {/* Chart 2: Incident Prediction Trend Bar */}
-        <div className="chart-box rounded-chart-box">
-          <div className="chart-box-header">
-            <h3 className="chart-title">Incident Volume Prediction</h3>
-            <span className="chart-subtitle">Forecasted incident creation density</span>
-          </div>
-          <div className="bar-chart-container tall-bar-container-220">
-            {incidentTrendSeries.map((item, idx) => {
-              const val = Math.round(item.count * (timeframe === "30d" ? 3 : timeframe === "90d" ? 7 : 1));
-              const heightPercent = Math.min(100, val * 12);
-              return (
-                <div key={idx} className="bar-column">
-                  <span className="bar-count-tag">{val}</span>
-                  <div className="bar-track bar-track-220">
-                    <div
-                      className="bar-fill"
-                      style={{
-                        height: `${Math.max(heightPercent, 14)}%`,
-                        background: val >= 6 ? "linear-gradient(180deg, #ef4444, #b91c1c)" : "linear-gradient(180deg, #f59e0b, #b45309)",
-                      }}
-                    />
-                  </div>
-                  <span className="bar-label">{item.label}</span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Chart 3: Revenue Impact Forecast */}
-        <div className="chart-box rounded-chart-box">
-          <div className="chart-box-header">
-            <h3 className="chart-title">Revenue & SLA Impact Forecast</h3>
-            <span className="chart-subtitle">Estimated financial risk per service module</span>
-          </div>
-          <div className="revenue-impact-list">
-            {revenueSeries.map((rev, idx) => (
-              <div key={idx} className="revenue-impact-row">
-                <div className="impact-name-group">
-                  <strong className="impact-service-name">{rev.name}</strong>
-                  <span className="impact-current-val">Base Revenue: {rev.current}</span>
-                </div>
-                <div className="impact-risk-group">
-                  <span className={`impact-risk-badge risk-${rev.risk.toLowerCase()}`}>
-                    -{rev.predictedLoss} Est. Loss
-                  </span>
-                  <span className="impact-risk-level">{rev.risk} Risk</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Chart 4: Infrastructure Load Forecast */}
-        <div className="chart-box rounded-chart-box">
-          <div className="chart-box-header">
-            <h3 className="chart-title">Infrastructure Load Forecast</h3>
-            <span className="chart-subtitle">Predicted resource utilization thresholds</span>
-          </div>
-          <div className="infra-load-container">
-            {infraLoadSeries.map((infra, idx) => (
-              <div key={idx} className="infra-load-row">
-                <div className="infra-label-bar">
-                  <span className="infra-name">{infra.service}</span>
-                  <span className="infra-percent">{infra.load}% Load</span>
-                </div>
-                <div className="infra-progress-track">
-                  <div
-                    className="infra-progress-fill"
-                    style={{
-                      width: `${infra.load}%`,
-                      background: infra.load > 90 ? "#ef4444" : infra.load > 75 ? "#f59e0b" : "#3b82f6",
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
+      <div style={{ width: "100%", height: 260, marginTop: "12px" }}>
+        <ResponsiveContainer width="100%" height="100%">
+          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+            <defs>
+              <linearGradient id="colorCritical" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#DC2626" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#DC2626" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="colorHigh" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="colorMedium" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#2563EB" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+            <XAxis dataKey="date" stroke="#6B7280" fontSize={11} />
+            <YAxis stroke="#6B7280" fontSize={11} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
+            <Area type="monotone" dataKey="critical" stroke="#DC2626" fillOpacity={1} fill="url(#colorCritical)" name="Critical" />
+            <Area type="monotone" dataKey="high" stroke="#F59E0B" fillOpacity={1} fill="url(#colorHigh)" name="High" />
+            <Area type="monotone" dataKey="medium" stroke="#2563EB" fillOpacity={1} fill="url(#colorMedium)" name="Medium" />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );

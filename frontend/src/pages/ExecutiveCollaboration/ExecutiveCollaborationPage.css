@@ -1,0 +1,156 @@
+/* =========================================================
+   ENTERPRISE SAAS DESIGN SYSTEM - EXECUTIVE COLLABORATION
+   Datadog / Grafana Cloud / Jira Service Management Aesthetic
+   Pure White Cards, Light Gray Section Background, Zero Emojis
+========================================================= */
+
+.executive-collaboration-page,
+.executive-collaboration-page.full-width-page {
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: #F8FAFC;
+  min-height: 100vh;
+}
+
+/* Kanban Grid & Column Layout (5 Columns) */
+.task-kanban-panel { display: flex; flex-direction: column; gap: 16px; }
+.kanban-grid-5-col { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+
+@media (max-width: 1300px) { .kanban-grid-5-col { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 768px) { .kanban-grid-5-col { grid-template-columns: 1fr; } }
+
+.kanban-column {
+  background: #F8FAFC;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 380px;
+}
+
+.kanban-column-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #E5E7EB; padding-bottom: 6px; }
+.column-title { font-size: 13px; font-weight: 600; color: #111827; }
+.col-count-badge { font-size: 11px; font-weight: 600; background: #E5E7EB; color: #111827; padding: 2px 6px; border-radius: 10px; }
+
+.kanban-cards-stack { display: flex; flex-direction: column; gap: 8px; }
+.kanban-task-card {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.kanban-task-card:hover { border-color: #2563EB; box-shadow: 0 4px 12px rgba(0,0,0,0.06); transform: translateY(-2px); }
+
+.task-card-top-row { display: flex; align-items: center; justify-content: space-between; }
+.task-card-name { font-size: 13px; font-weight: 600; color: #111827 !important; margin: 0; line-height: 1.35; }
+.task-card-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 2px; }
+.task-card-action-row { border-top: 1px solid #E5E7EB; padding-top: 6px; margin-top: 4px; display: flex; justify-content: flex-end; }
+
+/* AI Assistant Chat Panel */
+.ai-assistant-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 520px;
+}
+
+.ai-chat-stream {
+  flex: 1;
+  min-height: 180px;
+  max-height: 420px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 4px 12px 0;
+}
+
+.chat-message-row { display: flex; gap: 8px; }
+.chat-message-row.user { justify-content: flex-end; }
+
+.chat-bubble {
+  max-width: 85%;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #F8FAFC;
+  border: 1px solid #E5E7EB;
+  font-size: 13px;
+  color: #111827;
+  line-height: 1.5;
+  white-space: pre-line;
+}
+
+.chat-message-row.user .chat-bubble { background: #2563EB; color: #FFFFFF !important; border: none; }
+.chat-message-row.user .chat-bubble p { color: #FFFFFF !important; margin: 0; }
+.chat-bubble p { margin: 0; }
+
+.prompt-buttons-group { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 0; border-top: 1px solid #E5E7EB; }
+.chip-button { font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 12px; border: 1px solid #E5E7EB; background: #FFFFFF; color: #2563EB; cursor: pointer; transition: background 0.15s ease; }
+.chip-button:hover { background: #EFF6FF; }
+
+.chat-input-row { display: flex; gap: 8px; padding-top: 8px; margin-top: 0; }
+.form-input { flex: 1; padding: 6px 12px; font-size: 13px; border: 1px solid #E5E7EB; border-radius: 6px; color: #111827; outline: none; }
+
+/* Fixed Approval Table Formatting */
+.approval-table-panel { width: 100%; }
+.table-responsive-wrapper { width: 100%; overflow-x: auto; }
+.fixed-table { table-layout: fixed; width: 100%; border-collapse: collapse; }
+.fixed-table th { position: sticky; top: 0; background: #F8FAFC; z-index: 10; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 600; color: #4B5563; border-bottom: 1px solid #E5E7EB; }
+.fixed-table td { padding: 12px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+
+.table-task-link {
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  color: #111827 !important;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  line-height: 1.4;
+  box-shadow: none !important;
+}
+
+.table-task-link:hover {
+  color: #2563EB !important;
+  text-decoration: underline;
+}
+
+.text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  font-size: 13px;
+  color: #374151;
+}
+
+.table-action-btns { display: flex; gap: 6px; justify-content: flex-end; }
+.small-btn { padding: 4px 10px !important; font-size: 12px !important; height: auto !important; min-height: 28px !important; }
+
+/* Utilities */
+.align-right { text-align: right !important; }
+.btn-group-sm { display: flex; gap: 4px; }
+.font-bold { font-weight: 700; }
+.green-text { color: #16A34A !important; }

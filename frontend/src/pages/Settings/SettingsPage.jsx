@@ -197,26 +197,36 @@ export default function SettingsPage() {
               </div>
 
               <div className="form-row">
-                <div className="form-group">
-                  <label>Timezone</label>
-                  <input
-                    type="text"
-                    className="search-input"
-                    value={settings?.general?.timezone || ""}
+                <div className="form-group flex-1">
+                  <label className="caption-text">Timezone</label>
+                  <select
+                    className="form-select"
+                    value={settings?.general?.timezone || "IST (GMT+05:30)"}
                     disabled={!canEditTab("general")}
                     onChange={(e) => setSettings({ ...settings, general: { ...settings.general, timezone: e.target.value } })}
-                  />
+                  >
+                    <option value="UTC (GMT+00:00)">UTC (GMT+00:00)</option>
+                    <option value="EST (GMT-05:00)">EST (GMT-05:00)</option>
+                    <option value="PST (GMT-08:00)">PST (GMT-08:00)</option>
+                    <option value="IST (GMT+05:30)">IST (GMT+05:30)</option>
+                    <option value="CET (GMT+01:00)">CET (GMT+01:00)</option>
+                  </select>
                 </div>
 
-                <div className="form-group">
-                  <label>Language</label>
-                  <input
-                    type="text"
-                    className="search-input"
-                    value={settings?.general?.language || ""}
+                <div className="form-group flex-1">
+                  <label className="caption-text">Language</label>
+                  <select
+                    className="form-select"
+                    value={settings?.general?.language || "English (Default)"}
                     disabled={!canEditTab("general")}
                     onChange={(e) => setSettings({ ...settings, general: { ...settings.general, language: e.target.value } })}
-                  />
+                  >
+                    <option value="English (Default)">English (Default)</option>
+                    <option value="French">French</option>
+                    <option value="German">German</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Spanish">Spanish</option>
+                  </select>
                 </div>
               </div>
 

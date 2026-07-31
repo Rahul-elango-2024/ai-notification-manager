@@ -74,6 +74,43 @@ export const authService = {
     }
   },
 
+  getCurrentUser: () => {
+    const user = authService.getUser();
+    if (user && (user.fullName || user.username || user.name)) {
+      return {
+        id: user.id || 1,
+        fullName: user.fullName || user.name || user.username || "Rahul Elango",
+        email: user.email || "rahul@example.com",
+        role: user.role || "CTO / Executive Admin",
+        department: user.department || "IT Infrastructure",
+        avatar: (user.fullName || user.name || user.username || "Rahul Elango")
+          .split(" ")
+          .map((n) => n[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase(),
+        notifications: 3,
+        preferences: {
+          language: "English (Default)",
+          timezone: "IST (GMT+05:30)",
+        },
+      };
+    }
+    return {
+      id: 1,
+      fullName: "Rahul Elango",
+      email: "rahul@example.com",
+      role: "CTO / Executive Admin",
+      department: "IT Infrastructure",
+      avatar: "RE",
+      notifications: 3,
+      preferences: {
+        language: "English (Default)",
+        timezone: "IST (GMT+05:30)",
+      },
+    };
+  },
+
   getUserRole: () => {
     const userStr = localStorage.getItem("user");
     if (!userStr) return null;
@@ -83,5 +120,5 @@ export const authService = {
     } catch {
       return null;
     }
-  }
+  },
 };

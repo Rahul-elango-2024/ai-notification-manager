@@ -17,6 +17,7 @@ const simulationRoutes = require("./routes/simulationRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const incidentRoutes = require("./routes/incidentRoutes");
+const executiveRoutes = require("./routes/executiveRoutes");
 
 require("dotenv").config();
 
@@ -35,6 +36,9 @@ initializeSocket(httpServer, app);
 app.use(cors());
 app.use(express.json());
 
+const searchRoutes = require("./routes/searchRoutes");
+const aiRoutes = require("./routes/aiRoutes");
+
 app.use("/api/health", healthRoutes);
 app.use("/api", configurationRoutes);
 app.use("/api", alertRoutes);
@@ -52,6 +56,9 @@ app.use("/api", simulationRoutes);
 app.use("/api", profileRoutes);
 app.use("/api", settingsRoutes);
 app.use("/api/incidents", incidentRoutes);
+app.use("/api/executive", executiveRoutes);
+app.use("/api", searchRoutes);
+app.use("/api", aiRoutes);
 // ==========================================
 // CONFIGURATION
 // ==========================================
@@ -282,7 +289,124 @@ async function runMigrations() {
       );
     `);
 
-    console.log("✅ Enterprise API Integration Hub, AI Predictive Analytics, KPI Simulator, Incident Management & Settings database tables ready");
+    // Executive Collaboration Dashboard Tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS executive_users (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        email VARCHAR(100) UNIQUE,
+        department VARCHAR(100) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        title VARCHAR(100),
+        status VARCHAR(20) DEFAULT 'AVAILABLE',
+        avatar_url TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS team_presence (
+        id SERIAL PRIMARY KEY,
+        user_name VARCHAR(100) NOT NULL,
+        department VARCHAR(100) NOT NULL,
+        role VARCHAR(50) NOT NULL,
+        status VARCHAR(20) NOT NULL DEFAULT 'Available',
+        activity VARCHAR(255),
+        last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS team_messages (
+        id SERIAL PRIMARY KEY,
+        incident_id INTEGER REFERENCES incidents(id) ON DELETE SET NULL,
+        sender_name VARCHAR(100) NOT NULL,
+        sender_department VARCHAR(100),
+        message_type VARCHAR(30) DEFAULT 'ENGINEER',
+        content TEXT NOT NULL,
+        attachments JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS executive_tasks (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        description TEXT,
+        priority VARCHAR(20) DEFAULT 'MEDIUM',
+        owner_name VARCHAR(100) NOT NULL,
+        department VARCHAR(100) NOT NULL,
+        status VARCHAR(30) DEFAULT 'Pending',
+        due_date VARCHAR(50),
+        incident_id INTEGER REFERENCES incidents(id) ON DELETE SET NULL,
+        is_ai_generated BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS incident_comments (
+        id SERIAL PRIMARY KEY,
+        incident_id INTEGER REFERENCES incidents(id) ON DELETE CASCADE,
+        author_name VARCHAR(100) NOT NULL,
+        comment TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS activity_feed (
+        id SERIAL PRIMARY KEY,
+        event_type VARCHAR(50) NOT NULL,
+        actor_name VARCHAR(100) NOT NULL,
+        description TEXT NOT NULL,
+        category VARCHAR(50) DEFAULT 'GENERAL',
+        metadata JSONB,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS executive_approvals (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        requester_name VARCHAR(100) NOT NULL,
+        department VARCHAR(100) NOT NULL,
+        risk_level VARCHAR(20) NOT NULL,
+        status VARCHAR(20) DEFAULT 'PENDING',
+        approver_name VARCHAR(100),
+        comments TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS department_health (
+        id SERIAL PRIMARY KEY,
+        department_name VARCHAR(100) UNIQUE NOT NULL,
+        risk_score INTEGER NOT NULL,
+        incident_count INTEGER DEFAULT 0,
+        status VARCHAR(30) NOT NULL,
+        ai_health NUMERIC(5, 2) DEFAULT 95.0,
+        trend VARCHAR(20) DEFAULT 'STABLE',
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS executive_notifications (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) NOT NULL,
+        type VARCHAR(20) DEFAULT 'INFO',
+        message TEXT NOT NULL,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    console.log("✅ Enterprise API Integration Hub, AI Predictive Analytics, Executive Collaboration & Settings database tables ready");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
   }

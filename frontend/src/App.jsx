@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import React from "react";
 import { io } from "socket.io-client";
 import { useLocation, useNavigate, Routes, Route } from "react-router-dom";
@@ -13,6 +13,7 @@ import SimulationCenterPage from "./pages/SimulationCenter/SimulationCenterPage"
 import ProfilePage from "./pages/Profile/ProfilePage";
 import SettingsPage from "./pages/Settings/SettingsPage";
 import IncidentManagement from "./pages/IncidentManagement";
+import ExecutiveCollaborationPage from "./pages/ExecutiveCollaboration/ExecutiveCollaborationPage";
 
 import {
   canUpdateKPIs,
@@ -87,6 +88,48 @@ function App() {
     }
   };
 
+
+  const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchResults, setSearchResults] = useState({ incidents: [], tasks: [], alerts: [], users: [], kpis: [] });
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [unreadNotifCount, setUnreadNotifCount] = useState(3);
+  const searchInputRef = useRef(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (searchInputRef.current) {
+          searchInputRef.current.focus();
+        }
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!globalSearch.trim()) {
+      setSearchResults({ incidents: [], tasks: [], alerts: [], users: [], kpis: [] });
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/search?q=${encodeURIComponent(globalSearch)}`);
+        if (res.ok) {
+          const data = await res.json();
+          setSearchResults(data);
+        }
+      } catch (err) {
+        console.error("Global search error:", err);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [globalSearch]);
 
   const [kpis, setKpis] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -1810,11 +1853,16 @@ function App() {
     return <IncidentManagement />;
   };
 
+  const renderExecutiveCollaboration = () => {
+    return <ExecutiveCollaborationPage />;
+  };
+
   const pages = {
     overview: renderOverview,
     kpis: renderKpis,
     alerts: renderAlerts,
     incidents: renderIncidents,
+    "executive-collaboration": renderExecutiveCollaboration,
     notifications: renderNotifications,
     routing: renderRoutingGuarded,
     users: renderUsers,
@@ -1874,6 +1922,15 @@ function App() {
             label="Incidents"
             onClick={() =>
               handleNavigate("incidents", "/incidents")
+            }
+          />
+
+          <NavButton
+            active={activePage === "executive-collaboration"}
+            icon="👥"
+            label="Executive Collaboration"
+            onClick={() =>
+              setActivePage("executive-collaboration")
             }
           />
 
@@ -1996,13 +2053,147 @@ function App() {
 
       <main className="main-content">
         <div className="topbar">
-          <div className="topbar-status">
-            <span className="live-dot" />
-            Live monitoring active
+          <div className="topbar-status-pill">
+            <span className="status-dot-green">●</span> System status: <strong className="status-green-text">All systems operational</strong>
           </div>
 
-          <div className="topbar-meta">
-            Auto-refresh every 5 seconds
+          <div className="topbar-right-utilities">
+            {/* Global Search with Live Filter & Ctrl+K */}
+            <div className="topbar-search-box">
+              <span className="search-icon-sm">🔍</span>
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="topbar-search-input"
+                placeholder="Search anything..."
+                value={globalSearch}
+                onChange={(e) => setGlobalSearch(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+              />
+              <kbd className="kbd-shortcut">Ctrl + K</kbd>
+
+              {/* Live Search Results Dropdown */}
+              {searchFocused && globalSearch.trim() && (
+                <div className="topbar-search-results-dropdown">
+                  <div className="dropdown-section-title">SEARCH RESULTS FOR "{globalSearch}"</div>
+                  
+                  {(!searchResults.incidents?.length &&
+                    !searchResults.tasks?.length &&
+                    !searchResults.alerts?.length &&
+                    !searchResults.users?.length &&
+                    !searchResults.kpis?.length) ? (
+                    <div className="no-results-box p-3 text-center text-muted">
+                      No Results Found
+                    </div>
+                  ) : (
+                    <>
+                      {searchResults.incidents?.map((inc) => (
+                        <div key={`inc-${inc.id}`} className="search-result-item" onClick={() => handleNavigate("incidents", "/incidents")}>
+                          <span className="badge badge-danger">INCIDENT</span>
+                          <span className="result-text">{inc.title}</span>
+                        </div>
+                      ))}
+                      {searchResults.tasks?.map((t) => (
+                        <div key={`task-${t.id}`} className="search-result-item" onClick={() => setActivePage("executive-collaboration")}>
+                          <span className="badge badge-warning">TASK</span>
+                          <span className="result-text">{t.title}</span>
+                        </div>
+                      ))}
+                      {searchResults.alerts?.map((a) => (
+                        <div key={`alert-${a.id}`} className="search-result-item" onClick={() => setActivePage("alerts")}>
+                          <span className="badge badge-primary">ALERT</span>
+                          <span className="result-text">{a.message}</span>
+                        </div>
+                      ))}
+                      {searchResults.users?.map((u) => (
+                        <div key={`user-${u.id}`} className="search-result-item" onClick={() => setActivePage("users")}>
+                          <span className="badge badge-secondary">USER</span>
+                          <span className="result-text">{u.name} ({u.role || u.department})</span>
+                        </div>
+                      ))}
+                      {searchResults.kpis?.map((k) => (
+                        <div key={`kpi-${k.id}`} className="search-result-item" onClick={() => setActivePage("predictive-analytics")}>
+                          <span className="badge badge-success">KPI</span>
+                          <span className="result-text">{k.name}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Notification Bell with Dropdown */}
+            <div
+              className="topbar-notif-btn"
+              title="Notifications"
+              onClick={() => setNotifOpen(!notifOpen)}
+            >
+              <span className="bell-icon">🔔</span>
+              {unreadNotifCount > 0 && <span className="notif-badge-pill">{unreadNotifCount}</span>}
+
+              {/* Notifications Dropdown Panel */}
+              {notifOpen && (
+                <div className="topbar-notif-dropdown" onClick={(e) => e.stopPropagation()}>
+                  <div className="notif-dropdown-header">
+                    <strong>Notifications</strong>
+                    <button className="text-button" onClick={() => setUnreadNotifCount(0)}>Mark all read</button>
+                  </div>
+                  <div className="notif-dropdown-list">
+                    <div
+                      className="notif-dropdown-item"
+                      onClick={() => {
+                        handleNavigate("incidents", "/incidents");
+                        setNotifOpen(false);
+                        setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+                      }}
+                    >
+                      <span className="badge badge-danger">Incident</span>
+                      <p>Critical: Payment Webhook latency spike detected.</p>
+                      <small>2 mins ago</small>
+                    </div>
+                    <div
+                      className="notif-dropdown-item"
+                      onClick={() => {
+                        setActivePage("executive-collaboration");
+                        setNotifOpen(false);
+                        setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+                      }}
+                    >
+                      <span className="badge badge-warning">Approval</span>
+                      <p>Approval requested for auto-scaling API Gateway replicas.</p>
+                      <small>10 mins ago</small>
+                    </div>
+                    <div
+                      className="notif-dropdown-item"
+                      onClick={() => {
+                        setActivePage("predictive-analytics");
+                        setNotifOpen(false);
+                        setUnreadNotifCount((prev) => Math.max(0, prev - 1));
+                      }}
+                    >
+                      <span className="badge badge-primary">AI Insight</span>
+                      <p>Gemini AI generated prescriptive mitigation for DB pool.</p>
+                      <small>25 mins ago</small>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Avatar with Direct Navigation */}
+            <div
+              className="topbar-user-profile"
+              onClick={() => setActivePage("profile")}
+              title="View Profile"
+            >
+              <div className="user-avatar-circle">{currentUser.avatar}</div>
+              <div className="user-name-role">
+                <span className="user-fullname">{currentUser.fullName}</span>
+                <span className="user-title">{currentUser.role}</span>
+              </div>
+            </div>
           </div>
         </div>
 
