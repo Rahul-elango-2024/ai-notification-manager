@@ -1452,23 +1452,19 @@ button:disabled {
 }
 
 .ai-enhanced-section.impact-summary {
-  border-color: #fee2e2;
-  background:
-    linear-gradient(
-      135deg,
-      #fffafa,
-      #ffffff
-    );
+  border: 1px solid #fee2e2 !important;
+  background: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }
 
 .ai-enhanced-section.recommended-actions {
-  border-color: #d1fadf;
-  background:
-    linear-gradient(
-      135deg,
-      #f8fffb,
-      #ffffff
-    );
+  border: 1px solid #d1fadf !important;
+  background: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  mix-blend-mode: normal !important;
 }
 
 .ai-section-heading {
@@ -1490,39 +1486,51 @@ button:disabled {
   color: #7c3aed;
   font-size: 11px;
   font-weight: 800;
+  opacity: 1 !important;
 }
 
 .impact-summary .ai-section-icon {
-  background: #fff1f2;
-  color: #dc2626;
+  background: #fff1f2 !important;
+  color: #dc2626 !important;
+  opacity: 1 !important;
 }
 
-.recommended-actions
-  .ai-section-icon {
-  background: #ecfdf3;
-  color: #15803d;
+.recommended-actions .ai-section-icon {
+  background: #ecfdf3 !important;
+  color: #15803d !important;
+  opacity: 1 !important;
 }
 
-.ai-section-heading span {
+.ai-section-heading span,
+.impact-summary .ai-section-heading span {
   display: block;
   margin-bottom: 3px;
-  color: var(--text-muted);
-  font-size: 7px;
-  font-weight: 800;
-  letter-spacing: 0.9px;
+  color: #64748b !important;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.9px !important;
+  text-transform: uppercase !important;
+  opacity: 1 !important;
 }
 
-.ai-section-heading h4 {
+.ai-section-heading h4,
+.impact-summary .ai-section-heading h4 {
   margin: 0;
-  color: var(--text-primary);
-  font-size: 12px;
+  color: #1e293b !important;
+  font-size: 14px !important;
+  font-weight: 700 !important;
+  opacity: 1 !important;
 }
 
-.ai-enhanced-section > p {
+.ai-enhanced-section > p,
+.impact-summary > p,
+.impact-summary p {
   margin: 0;
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.75;
+  color: #334155 !important;
+  font-size: 13px !important;
+  line-height: 1.7 !important;
+  font-weight: 500 !important;
+  opacity: 1 !important;
 }
 
 /* ==========================================

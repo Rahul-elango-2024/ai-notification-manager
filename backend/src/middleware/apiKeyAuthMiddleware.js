@@ -31,7 +31,7 @@ const apiKeyAuthMiddleware = async (req, res, next) => {
     const result = await pool.query(
       `SELECT id, key_name, key_prefix, department_id, status, expires_at 
        FROM api_keys 
-       WHERE api_key_hash = $1 
+       WHERE api_key_hash = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)
        LIMIT 1`,
       [keyHash]
     );

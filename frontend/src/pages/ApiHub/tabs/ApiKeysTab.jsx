@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 
 export default function ApiKeysTab({
-  apiKeys,
-  departments,
+  apiKeys = [],
+  departments = [],
   onRefresh,
   addToast,
   authHeaders,
@@ -26,10 +26,17 @@ export default function ApiKeysTab({
   // Rotate Key Secret Modal
   const [rotatedSecret, setRotatedSecret] = useState(null);
 
+  // View Details Modal State
+  const [viewKeyDetails, setViewKeyDetails] = useState(null);
+
+  // Delete Confirmation Modal State
+  const [keyToDelete, setKeyToDelete] = useState(null);
+  const [deletingKey, setDeletingKey] = useState(false);
+
   // Copy helper
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
-    addToast("API Key copied to clipboard!", "success");
+    addToast("Copied to clipboard!", "success");
   };
 
   // Filter keys
@@ -82,7 +89,7 @@ export default function ApiKeysTab({
   };
 
   const handleRotateKey = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to rotate the credentials for API Key '${name}'? The existing key will stop working immediately.`)) {
+    if (!window.confirm(`Are you sure you want to rotate credentials for API Key '${name}'? The existing key will stop working immediately.`)) {
       return;
     }
 
@@ -127,13 +134,13 @@ export default function ApiKeysTab({
   };
 
   const handleRevokeKey = async (id, name) => {
-    if (!window.confirm(`Are you sure you want to permanently revoke API Key '${name}'? This action cannot be undone.`)) {
+    if (!window.confirm(`Are you sure you want to revoke API Key '${name}'?`)) {
       return;
     }
 
     try {
-      const res = await fetch(`${apiUrl}/api/api-keys/${id}`, {
-        method: "DELETE",
+      const res = await fetch(`${apiUrl}/api/api-keys/${id}/revoke`, {
+        method: "POST",
         headers: authHeaders(),
       });
 
@@ -144,6 +151,30 @@ export default function ApiKeysTab({
       onRefresh();
     } catch (err) {
       addToast(err.message, "error");
+    }
+  };
+
+  // Permanent Delete Handler
+  const confirmDeleteKey = async () => {
+    if (!keyToDelete) return;
+    setDeletingKey(true);
+
+    try {
+      const res = await fetch(`${apiUrl}/api/api-keys/${keyToDelete.id}`, {
+        method: "DELETE",
+        headers: authHeaders(),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to delete API key.");
+
+      addToast("API Key deleted successfully.", "success");
+      setKeyToDelete(null);
+      onRefresh();
+    } catch (err) {
+      addToast(err.message || "Failed to delete API key.", "error");
+    } finally {
+      setDeletingKey(false);
     }
   };
 
@@ -206,18 +237,27 @@ export default function ApiKeysTab({
                   <th>Status</th>
                   <th>Last Used</th>
                   <th>Created</th>
-                  <th>Actions</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredKeys.map((k) => (
-                  <tr key={k.id}>
+                  <tr key={k.id} className="api-key-row">
                     <td>
-                      <strong>{k.key_name}</strong>
+                      <strong className="table-primary">{k.key_name}</strong>
                       {k.description && <small className="table-subtext">{k.description}</small>}
                     </td>
                     <td>
-                      <code className="key-prefix-code">{k.key_prefix}</code>
+                      <div className="prefix-cell">
+                        <code className="key-prefix-code">{k.key_prefix}</code>
+                        <button
+                          className="copy-prefix-btn"
+                          onClick={() => copyToClipboard(k.key_prefix)}
+                          title="Copy Key Prefix"
+                        >
+                          📋
+                        </button>
+                      </div>
                     </td>
                     <td>{k.department_name || "All Departments"}</td>
                     <td>{k.owner_name || "-"}</td>
@@ -228,31 +268,47 @@ export default function ApiKeysTab({
                     </td>
                     <td>{k.last_used_at ? new Date(k.last_used_at).toLocaleString() : "Never"}</td>
                     <td>{new Date(k.created_at).toLocaleDateString()}</td>
-                    <td>
+                    <td style={{ textAlign: "right" }}>
                       <div className="action-buttons-cell">
+                        <button
+                          className="text-button btn-view"
+                          onClick={() => setViewKeyDetails(k)}
+                          title="View Details"
+                        >
+                          👁️ View
+                        </button>
+
                         {k.status !== "REVOKED" && (
                           <>
                             <button
-                              className="text-button"
+                              className="text-button btn-rotate"
                               onClick={() => handleRotateKey(k.id, k.key_name)}
                               title="Rotate Credentials"
                             >
-                              Rotate
+                              ↻ Rotate
                             </button>
                             <button
-                              className="text-button"
+                              className="text-button btn-toggle"
                               onClick={() => handleToggleStatus(k.id, k.status, k.key_name)}
                             >
-                              {k.status === "ACTIVE" ? "Disable" : "Enable"}
+                              {k.status === "ACTIVE" ? "🚫 Disable" : "✅ Enable"}
                             </button>
                             <button
-                              className="danger-text-button"
+                              className="danger-text-button btn-revoke"
                               onClick={() => handleRevokeKey(k.id, k.key_name)}
                             >
-                              Revoke
+                              ⚠️ Revoke
                             </button>
                           </>
                         )}
+
+                        <button
+                          className="danger-text-button btn-delete-red"
+                          onClick={() => setKeyToDelete(k)}
+                          title="Delete API Key Permanently"
+                        >
+                          🗑️ Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -272,7 +328,7 @@ export default function ApiKeysTab({
       {/* CREATE API KEY MODAL */}
       {showCreateModal && (
         <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && setShowCreateModal(false)}>
-          <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal enterprise-modal" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div>
                 <h3>{createdSecret ? "API Key Generated" : "Generate Enterprise API Key"}</h3>
@@ -285,7 +341,7 @@ export default function ApiKeysTab({
               <div className="modal-body secret-display-body">
                 <div className="security-alert-box">
                   <strong>⚠️ IMPORTANT: Copy your API Key now!</strong>
-                  <p>This plaintext API key will NEVER be shown again. Store it securely in your enterprise secret store.</p>
+                  <p>This plaintext API key will NEVER be shown again. Store it securely in your secret store.</p>
                 </div>
 
                 <div className="secret-key-box">
@@ -346,6 +402,7 @@ export default function ApiKeysTab({
                     <textarea
                       className="form-textarea"
                       placeholder="Purpose or application details..."
+                      rows={3}
                       value={newKeyForm.description}
                       onChange={(e) => setNewKeyForm({ ...newKeyForm, description: e.target.value })}
                     />
@@ -366,10 +423,91 @@ export default function ApiKeysTab({
         </div>
       )}
 
+      {/* VIEW API KEY DETAILS MODAL */}
+      {viewKeyDetails && (
+        <div className="modal-overlay" onClick={() => setViewKeyDetails(null)}>
+          <div className="modal enterprise-modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div>
+                <h3>API Key Details</h3>
+                <p>Security & telemetry information for '{viewKeyDetails.key_name}'</p>
+              </div>
+              <button className="modal-close" onClick={() => setViewKeyDetails(null)}>×</button>
+            </div>
+            <div className="modal-body">
+              <div className="info-grid">
+                <div className="info-cell">
+                  <span className="info-label">Key Name</span>
+                  <strong className="info-value">{viewKeyDetails.key_name}</strong>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Key Prefix</span>
+                  <code className="key-prefix-code">{viewKeyDetails.key_prefix}</code>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Department</span>
+                  <span className="info-value">{viewKeyDetails.department_name || "Global"}</span>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Owner</span>
+                  <span className="info-value">{viewKeyDetails.owner_name || "N/A"}</span>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Status</span>
+                  <span className={`status-badge ${(viewKeyDetails.status || "").toLowerCase()}`}>
+                    {viewKeyDetails.status}
+                  </span>
+                </div>
+                <div className="info-cell">
+                  <span className="info-label">Created At</span>
+                  <span className="info-value">{new Date(viewKeyDetails.created_at).toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setViewKeyDetails(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE API KEY CONFIRMATION DIALOG */}
+      {keyToDelete && (
+        <div className="modal-overlay" onClick={() => setKeyToDelete(null)}>
+          <div className="modal enterprise-modal delete-modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <div>
+                <h3 style={{ color: "#ef4444" }}>Delete API Key</h3>
+                <p>Confirm permanent deletion of key '{keyToDelete.key_name}'</p>
+              </div>
+              <button className="modal-close" onClick={() => setKeyToDelete(null)}>×</button>
+            </div>
+
+            <div className="modal-body">
+              <div className="security-alert-box danger-box">
+                <strong>⚠️ Permanent Action Warning</strong>
+                <p>This action permanently deletes the API key. Applications using this key will immediately lose access.</p>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setKeyToDelete(null)} disabled={deletingKey}>
+                Cancel
+              </button>
+              <button className="danger-button-red" onClick={confirmDeleteKey} disabled={deletingKey}>
+                {deletingKey ? "Deleting..." : "Delete Key"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ROTATE SECRET DISPLAY MODAL */}
       {rotatedSecret && (
         <div className="modal-overlay" onClick={() => setRotatedSecret(null)}>
-          <div className="modal" role="dialog" aria-modal="true">
+          <div className="modal enterprise-modal" role="dialog" aria-modal="true">
             <div className="modal-header">
               <div>
                 <h3>API Key Credentials Rotated</h3>

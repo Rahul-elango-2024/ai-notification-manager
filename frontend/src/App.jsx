@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import React from "react";
 import { io } from "socket.io-client";
+import { useLocation, useNavigate, Routes, Route } from "react-router-dom";
+import { AlertTriangle } from "lucide-react";
 import "./App.css";
 import Login from "./pages/Login";
 import { authService } from "./services/authService";
@@ -10,6 +12,8 @@ import PredictiveAnalyticsPage from "./pages/PredictiveAnalytics/PredictiveAnaly
 import SimulationCenterPage from "./pages/SimulationCenter/SimulationCenterPage";
 import ProfilePage from "./pages/Profile/ProfilePage";
 import SettingsPage from "./pages/Settings/SettingsPage";
+import IncidentManagement from "./pages/IncidentManagement";
+
 import {
   canUpdateKPIs,
   canResolveAlerts,
@@ -62,9 +66,27 @@ class ErrorBoundary extends React.Component {
 }
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [showLogin, setShowLogin] = useState(!authService.getToken());
   const [checkingSession, setCheckingSession] = useState(!!authService.getToken());
-  const [activePage, setActivePage] = useState("overview");
+  const [activePage, setActivePage] = useState(
+    location.pathname === "/incidents" ? "incidents" : "overview"
+  );
+
+  useEffect(() => {
+    if (location.pathname === "/incidents") {
+      setActivePage("incidents");
+    }
+  }, [location.pathname]);
+
+  const handleNavigate = (pageKey, path) => {
+    setActivePage(pageKey);
+    if (path) {
+      navigate(path);
+    }
+  };
+
 
   const [kpis, setKpis] = useState([]);
   const [alerts, setAlerts] = useState([]);
@@ -76,12 +98,12 @@ function App() {
 
   const [kpiValues, setKpiValues] = useState({});
   const [updatingKpi, setUpdatingKpi] = useState(null);
-const [selectedAlertId, setSelectedAlertId] = useState(null);
-const [acknowledgingAlert, setAcknowledgingAlert] = useState(null);
+  const [selectedAlertId, setSelectedAlertId] = useState(null);
+  const [acknowledgingAlert, setAcknowledgingAlert] = useState(null);
 
-const [alertDetails, setAlertDetails] = useState(null);
-const [loadingAlertDetails, setLoadingAlertDetails] =
-  useState(false);
+  const [alertDetails, setAlertDetails] = useState(null);
+  const [loadingAlertDetails, setLoadingAlertDetails] =
+    useState(false);
   const [newRoute, setNewRoute] = useState({
     department_id: "",
     severity: "WARNING",
@@ -242,8 +264,8 @@ const [loadingAlertDetails, setLoadingAlertDetails] =
       if (!response.ok) {
         throw new Error(
           data.message ||
-            data.error ||
-            "Failed to acknowledge alert"
+          data.error ||
+          "Failed to acknowledge alert"
         );
       }
 
@@ -251,18 +273,18 @@ const [loadingAlertDetails, setLoadingAlertDetails] =
         previousAlerts.map((alert) =>
           Number(alert.id) === Number(id)
             ? {
-                ...alert,
-                ...data.alert,
-                is_acknowledged: true,
-                acknowledged_by:
-                  data.alert?.acknowledged_by || "Rahul",
-                acknowledged_at:
-                  data.alert?.acknowledged_at ||
-                  new Date().toISOString(),
-                escalation_status:
-                  data.alert?.escalation_status ||
-                  "ACKNOWLEDGED",
-              }
+              ...alert,
+              ...data.alert,
+              is_acknowledged: true,
+              acknowledged_by:
+                data.alert?.acknowledged_by || "Rahul",
+              acknowledged_at:
+                data.alert?.acknowledged_at ||
+                new Date().toISOString(),
+              escalation_status:
+                data.alert?.escalation_status ||
+                "ACKNOWLEDGED",
+            }
             : alert
         )
       );
@@ -285,68 +307,68 @@ const [loadingAlertDetails, setLoadingAlertDetails] =
   };
 
   // ==========================================
-// RESOLVE ALERT
-// ==========================================
-const resolveAlert = async (id) => {
-  try {
-    const resolvedBy = prompt(
-      "Enter the name of the person resolving this alert:",
-      "Rahul"
-    );
+  // RESOLVE ALERT
+  // ==========================================
+  const resolveAlert = async (id) => {
+    try {
+      const resolvedBy = prompt(
+        "Enter the name of the person resolving this alert:",
+        "Rahul"
+      );
 
-    // User cancelled the resolution
-    if (resolvedBy === null) {
-      return;
-    }
+      // User cancelled the resolution
+      if (resolvedBy === null) {
+        return;
+      }
 
-    if (!resolvedBy.trim()) {
-      alert("Resolved By is required.");
-      return;
-    }
+      if (!resolvedBy.trim()) {
+        alert("Resolved By is required.");
+        return;
+      }
 
-   const resolutionNote = prompt(
-  "Enter the resolution note:",
-  ""
-);
+      const resolutionNote = prompt(
+        "Enter the resolution note:",
+        ""
+      );
 
-// User cancelled the resolution
-if (resolutionNote === null) {
-  return;
-}
+      // User cancelled the resolution
+      if (resolutionNote === null) {
+        return;
+      }
 
-// Resolution note cannot be empty
-if (!resolutionNote.trim()) {
-  alert("Resolution Note is required.");
-  return;
-}
+      // Resolution note cannot be empty
+      if (!resolutionNote.trim()) {
+        alert("Resolution Note is required.");
+        return;
+      }
 
-   const response = await fetch(
-  `${API_URL}/api/alerts/${id}/resolve`,
-  {
-    method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      resolved_by: resolvedBy.trim(),
-      resolution_note: resolutionNote.trim(),
-    }),
-  }
-);
-    const data = await response.json();
+      const response = await fetch(
+        `${API_URL}/api/alerts/${id}/resolve`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            resolved_by: resolvedBy.trim(),
+            resolution_note: resolutionNote.trim(),
+          }),
+        }
+      );
+      const data = await response.json();
 
-    if (!response.ok) {
-      throw new Error(
-        data.message ||
+      if (!response.ok) {
+        throw new Error(
+          data.message ||
           data.error ||
           "Failed to resolve alert"
-      );
-    }
+        );
+      }
 
-    setAlerts((previousAlerts) =>
-      previousAlerts.map((alert) =>
-        Number(alert.id) === Number(id)
-          ? {
+      setAlerts((previousAlerts) =>
+        previousAlerts.map((alert) =>
+          Number(alert.id) === Number(id)
+            ? {
               ...alert,
               ...data.alert,
               is_resolved: true,
@@ -361,23 +383,23 @@ if (!resolutionNote.trim()) {
                 resolutionNote.trim() ||
                 null,
             }
-          : alert
-      )
-    );
+            : alert
+        )
+      );
 
-    setSelectedAlertId(id);
+      setSelectedAlertId(id);
 
-    console.log(
-      `Alert #${id} resolved successfully by ${resolvedBy.trim()}`
-    );
-  } catch (error) {
-    console.error(
-      "Error resolving alert:",
-      error
-    );
-    alert(error.message);
-  }
-};
+      console.log(
+        `Alert #${id} resolved successfully by ${resolvedBy.trim()}`
+      );
+    } catch (error) {
+      console.error(
+        "Error resolving alert:",
+        error
+      );
+      alert(error.message);
+    }
+  };
 
   // ==========================================
   // CREATE NOTIFICATION ROUTE
@@ -417,7 +439,7 @@ if (!resolutionNote.trim()) {
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to create notification route"
+          "Failed to create notification route"
         );
       }
 
@@ -460,7 +482,7 @@ if (!resolutionNote.trim()) {
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to update notification route"
+          "Failed to update notification route"
         );
       }
 
@@ -500,7 +522,7 @@ if (!resolutionNote.trim()) {
       if (!response.ok) {
         throw new Error(
           data.message ||
-            "Failed to delete notification route"
+          "Failed to delete notification route"
         );
       }
 
@@ -625,9 +647,9 @@ if (!resolutionNote.trim()) {
     ).length;
 
   const selectedAlert =
-  activePage === "overview"
-    ? activeAlerts[0] || alerts[0] || null
-    : alerts.find(
+    activePage === "overview"
+      ? activeAlerts[0] || alerts[0] || null
+      : alerts.find(
         (alert) =>
           Number(alert.id) === Number(selectedAlertId)
       ) ||
@@ -642,10 +664,10 @@ if (!resolutionNote.trim()) {
   const selectedAlertNotification =
     selectedAlert
       ? notificationLogs.find(
-          (log) =>
-            Number(log.alert_id) ===
-            Number(selectedAlert.id)
-        )
+        (log) =>
+          Number(log.alert_id) ===
+          Number(selectedAlert.id)
+      )
       : null;
 
   const departments = [
@@ -660,136 +682,136 @@ if (!resolutionNote.trim()) {
     ).values(),
   ];
 
- // ==========================================
-// OPEN ALERTS PAGE
-// ==========================================
-const openAlertsPage = (alertId = null) => {
-  if (alertId !== null && alertId !== undefined) {
-    setSelectedAlertId(alertId);
-  } else {
-    const firstActiveAlert = alerts.find(
-      (alert) => !alert.is_resolved
-    );
+  // ==========================================
+  // OPEN ALERTS PAGE
+  // ==========================================
+  const openAlertsPage = (alertId = null) => {
+    if (alertId !== null && alertId !== undefined) {
+      setSelectedAlertId(alertId);
+    } else {
+      const firstActiveAlert = alerts.find(
+        (alert) => !alert.is_resolved
+      );
 
-    setSelectedAlertId(
-      firstActiveAlert?.id ?? alerts[0]?.id ?? null
-    );
-  }
+      setSelectedAlertId(
+        firstActiveAlert?.id ?? alerts[0]?.id ?? null
+      );
+    }
 
-  setActivePage("alerts");
-};
+    setActivePage("alerts");
+  };
 
-// ==========================================
-// INITIAL DATA LOAD & SESSION
-// ==========================================
-useEffect(() => {
-  const initApp = async () => {
-    const token = authService.getToken();
-    if (token) {
-      try {
-        await authService.verifySession(token);
-        setShowLogin(false);
-      } catch (error) {
-        console.error("Session verification failed:", error);
-        authService.clearSession();
+  // ==========================================
+  // INITIAL DATA LOAD & SESSION
+  // ==========================================
+  useEffect(() => {
+    const initApp = async () => {
+      const token = authService.getToken();
+      if (token) {
+        try {
+          await authService.verifySession(token);
+          setShowLogin(false);
+        } catch (error) {
+          console.error("Session verification failed:", error);
+          authService.clearSession();
+          setShowLogin(true);
+        }
+      } else {
         setShowLogin(true);
       }
-    } else {
-      setShowLogin(true);
+      setCheckingSession(false);
+      fetchData();
+    };
+
+    initApp();
+  }, []);
+
+  // ==========================================
+  // AUTO REFRESH
+  // ==========================================
+  useEffect(() => {
+    socket.on("connect", () => {
+      console.log("Connected:", socket.id);
+    });
+
+    socket.on("newAlert", () => {
+      console.log("New alert received!");
+      fetchData(true);
+    });
+
+    return () => {
+      socket.off("connect");
+      socket.off("newAlert");
+    };
+  }, []);
+
+  // ==========================================
+  // FETCH SELECTED ALERT DETAILS
+  // ==========================================
+  useEffect(() => {
+    if (!selectedAlertId) {
+      setAlertDetails(null);
+      return;
     }
-    setCheckingSession(false);
-    fetchData();
-  };
-  
-  initApp();
-}, []);
 
-// ==========================================
-// AUTO REFRESH
-// ==========================================
-useEffect(() => {
-  socket.on("connect", () => {
-    console.log("Connected:", socket.id);
-  });
+    const fetchAlertDetails = async () => {
+      setLoadingAlertDetails(true);
 
-  socket.on("newAlert", () => {
-    console.log("New alert received!");
-    fetchData(true);
-  });
+      try {
+        const response = await fetch(
+          `${API_URL}/api/alerts/${selectedAlertId}/details`
+        );
 
-  return () => {
-    socket.off("connect");
-    socket.off("newAlert");
-  };
-}, []);
+        if (!response.ok) {
+          throw new Error("Failed to fetch alert details");
+        }
 
-// ==========================================
-// FETCH SELECTED ALERT DETAILS
-// ==========================================
-useEffect(() => {
-  if (!selectedAlertId) {
-    setAlertDetails(null);
-    return;
+        const data = await response.json();
+
+        setAlertDetails(data);
+      } catch (error) {
+        console.error(
+          "Error fetching alert details:",
+          error
+        );
+      } finally {
+        setLoadingAlertDetails(false);
+      }
+    };
+
+    fetchAlertDetails();
+  }, [selectedAlertId]);
+
+  // ==========================================
+  // RENDER LOGIN SCREEN
+  // ==========================================
+  if (checkingSession) {
+    return (
+      <div className="loading-screen">
+        Verifying session...
+      </div>
+    );
   }
 
-  const fetchAlertDetails = async () => {
-    setLoadingAlertDetails(true);
+  if (showLogin) {
+    return <Login onLoginSuccess={() => setShowLogin(false)} />;
+  }
 
-    try {
-      const response = await fetch(
-        `${API_URL}/api/alerts/${selectedAlertId}/details`
-      );
-
-      if (!response.ok) {
-        throw new Error("Failed to fetch alert details");
-      }
-
-      const data = await response.json();
-
-      setAlertDetails(data);
-    } catch (error) {
-      console.error(
-        "Error fetching alert details:",
-        error
-      );
-    } finally {
-      setLoadingAlertDetails(false);
-    }
+  // ==========================================
+  // LOGOUT HANDLER
+  // ==========================================
+  const handleLogout = () => {
+    authService.clearSession();
+    setShowLogin(true);
   };
 
-  fetchAlertDetails();
-}, [selectedAlertId]);
-
-// ==========================================
-// RENDER LOGIN SCREEN
-// ==========================================
-if (checkingSession) {
-  return (
-    <div className="loading-screen">
-      Verifying session...
-    </div>
-  );
-}
-
-if (showLogin) {
-  return <Login onLoginSuccess={() => setShowLogin(false)} />;
-}
-
-// ==========================================
-// LOGOUT HANDLER
-// ==========================================
-const handleLogout = () => {
-  authService.clearSession();
-  setShowLogin(true);
-};
-
-if (loading) {
-  return (
-    <div className="loading-screen">
-      ...
-    </div>
-  );
-}
+  if (loading) {
+    return (
+      <div className="loading-screen">
+        ...
+      </div>
+    );
+  }
 
   // ==========================================
   // OVERVIEW PAGE
@@ -939,19 +961,19 @@ if (loading) {
           </div>
 
           {selectedAlert ? (
-        <ErrorBoundary>
-          <AlertDetail
-  alert={selectedAlert}
-  analysis={selectedAnalysis}
-  notification={selectedAlertNotification}
-  alertDetails={alertDetails}
-  loadingAlertDetails={loadingAlertDetails}
-  formatDate={formatDate}
-  onResolve={resolveAlert}
-  onAcknowledge={acknowledgeAlert}
-  acknowledgingAlert={acknowledgingAlert}
-/>
-        </ErrorBoundary>
+            <ErrorBoundary>
+              <AlertDetail
+                alert={selectedAlert}
+                analysis={selectedAnalysis}
+                notification={selectedAlertNotification}
+                alertDetails={alertDetails}
+                loadingAlertDetails={loadingAlertDetails}
+                formatDate={formatDate}
+                onResolve={resolveAlert}
+                onAcknowledge={acknowledgeAlert}
+                acknowledgingAlert={acknowledgingAlert}
+              />
+            </ErrorBoundary>
           ) : (
             <EmptyState
               title="No alerts detected"
@@ -1018,11 +1040,10 @@ if (loading) {
 
                       <td>
                         <span
-                          className={`state-indicator ${
-                            alert.is_resolved
+                          className={`state-indicator ${alert.is_resolved
                               ? "resolved"
                               : "active"
-                          }`}
+                            }`}
                         >
                           {alert.is_resolved
                             ? "Resolved"
@@ -1032,11 +1053,10 @@ if (loading) {
 
                       <td>
                         <span
-                          className={`acknowledgement-badge ${
-                            alert.is_acknowledged
+                          className={`acknowledgement-badge ${alert.is_acknowledged
                               ? "acknowledged"
                               : "pending"
-                          }`}
+                            }`}
                         >
                           {alert.is_acknowledged
                             ? "Acknowledged"
@@ -1184,36 +1204,36 @@ if (loading) {
             </div>
 
             {canUpdateKPIs() && (
-            <div className="kpi-update-form">
-              <label>Update KPI Value</label>
+              <div className="kpi-update-form">
+                <label>Update KPI Value</label>
 
-              <div>
-                <input
-                  type="number"
-                  placeholder={`Enter value (${kpi.unit})`}
-                  value={kpiValues[kpi.id] || ""}
-                  onChange={(event) =>
-                    setKpiValues(
-                      (previousValues) => ({
-                        ...previousValues,
-                        [kpi.id]: event.target.value,
-                      })
-                    )
-                  }
-                />
+                <div>
+                  <input
+                    type="number"
+                    placeholder={`Enter value (${kpi.unit})`}
+                    value={kpiValues[kpi.id] || ""}
+                    onChange={(event) =>
+                      setKpiValues(
+                        (previousValues) => ({
+                          ...previousValues,
+                          [kpi.id]: event.target.value,
+                        })
+                      )
+                    }
+                  />
 
-                <button
-                  onClick={() =>
-                    updateKpiValue(kpi.id)
-                  }
-                  disabled={updatingKpi === kpi.id}
-                >
-                  {updatingKpi === kpi.id
-                    ? "Updating..."
-                    : "Update"}
-                </button>
+                  <button
+                    onClick={() =>
+                      updateKpiValue(kpi.id)
+                    }
+                    disabled={updatingKpi === kpi.id}
+                  >
+                    {updatingKpi === kpi.id
+                      ? "Updating..."
+                      : "Update"}
+                  </button>
+                </div>
               </div>
-            </div>
             )}
           </div>
         ))}
@@ -1254,12 +1274,11 @@ if (loading) {
             <div className="alert-browser-list">
               {alerts.map((alert) => (
                 <button
-                  className={`alert-browser-item ${
-                    Number(selectedAlert?.id) ===
-                    Number(alert.id)
+                  className={`alert-browser-item ${Number(selectedAlert?.id) ===
+                      Number(alert.id)
                       ? "selected"
                       : ""
-                  }`}
+                    }`}
                   key={alert.id}
                   onClick={() =>
                     setSelectedAlertId(alert.id)
@@ -1269,11 +1288,10 @@ if (loading) {
                     <StatusBadge status={alert.status} />
 
                     <span
-                      className={`state-indicator ${
-                        alert.is_resolved
+                      className={`state-indicator ${alert.is_resolved
                           ? "resolved"
                           : "active"
-                      }`}
+                        }`}
                     >
                       {alert.is_resolved
                         ? "Resolved"
@@ -1286,11 +1304,10 @@ if (loading) {
                   <span>{alert.department}</span>
 
                   <span
-                    className={`acknowledgement-badge ${
-                      alert.is_acknowledged
+                    className={`acknowledgement-badge ${alert.is_acknowledged
                         ? "acknowledged"
                         : "pending"
-                    }`}
+                      }`}
                   >
                     {alert.is_acknowledged
                       ? "Acknowledged"
@@ -1308,20 +1325,20 @@ if (loading) {
 
         <div className="panel alert-full-detail">
           {selectedAlert ? (
-        <ErrorBoundary>
-            <AlertDetail
-  alert={selectedAlert}
-  analysis={selectedAnalysis}
-  notification={selectedAlertNotification}
-  alertDetails={alertDetails}
-  loadingAlertDetails={loadingAlertDetails}
-  formatDate={formatDate}
-  onResolve={resolveAlert}
-  onAcknowledge={acknowledgeAlert}
-  acknowledgingAlert={acknowledgingAlert}
-  expanded
-/>   
-        </ErrorBoundary>
+            <ErrorBoundary>
+              <AlertDetail
+                alert={selectedAlert}
+                analysis={selectedAnalysis}
+                notification={selectedAlertNotification}
+                alertDetails={alertDetails}
+                loadingAlertDetails={loadingAlertDetails}
+                formatDate={formatDate}
+                onResolve={resolveAlert}
+                onAcknowledge={acknowledgeAlert}
+                acknowledgingAlert={acknowledgingAlert}
+                expanded
+              />
+            </ErrorBoundary>
           ) : (
             <EmptyState
               title="Select an alert"
@@ -1333,131 +1350,131 @@ if (loading) {
     </>
   );
   // ==========================================
-// NOTIFICATIONS PAGE
-// ==========================================
-const renderNotifications = () => (
-  <>
-    <PageHeader
-      eyebrow="DELIVERY & AUDIT"
-      title="Notification History"
-      description="Track successful and failed enterprise alert deliveries."
-    />
-
-    <section className="metric-grid compact-metrics">
-      <MetricCard
-        label="Total Attempts"
-        value={notificationLogs.length}
-        icon="✉"
-        tone="blue"
-        description="Notification records"
+  // NOTIFICATIONS PAGE
+  // ==========================================
+  const renderNotifications = () => (
+    <>
+      <PageHeader
+        eyebrow="DELIVERY & AUDIT"
+        title="Notification History"
+        description="Track successful and failed enterprise alert deliveries."
       />
 
-      <MetricCard
-        label="Successfully Sent"
-        value={successfulNotifications}
-        icon="✓"
-        tone="green"
-        description="Delivered successfully"
-      />
-
-      <MetricCard
-        label="Failed"
-        value={failedNotifications}
-        icon="!"
-        tone="red"
-        description="Requires review"
-      />
-    </section>
-
-    <div className="panel">
-      <div className="panel-header">
-        <div>
-          <h2>Delivery Log</h2>
-          <p>Full notification audit history.</p>
-        </div>
-      </div>
-
-      {notificationLogs.length === 0 ? (
-        <EmptyState
-          title="No notification history"
-          description="Notification attempts will be recorded here."
+      <section className="metric-grid compact-metrics">
+        <MetricCard
+          label="Total Attempts"
+          value={notificationLogs.length}
+          icon="✉"
+          tone="blue"
+          description="Notification records"
         />
-      ) : (
-        <div className="data-table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Alert</th>
-                <th>Recipient</th>
-                <th>Channel</th>
-                <th>Status</th>
-                <th>Retries</th>
-                <th>Escalation</th>
-                <th>Time</th>
-                <th>Details</th>
-              </tr>
-            </thead>
 
-            <tbody>
-              {notificationLogs.map((log) => (
-                <tr key={log.id}>
-                  <td>#{log.id}</td>
+        <MetricCard
+          label="Successfully Sent"
+          value={successfulNotifications}
+          icon="✓"
+          tone="green"
+          description="Delivered successfully"
+        />
 
-                  <td>
-                    #{log.alert_id || "-"}
-                  </td>
+        <MetricCard
+          label="Failed"
+          value={failedNotifications}
+          icon="!"
+          tone="red"
+          description="Requires review"
+        />
+      </section>
 
-                  <td>
-                    <div className="table-primary">
-                      {log.recipient}
-                    </div>
-                  </td>
-
-                  <td>{log.channel}</td>
-
-                  <td>
-                    <span
-                      className={`delivery-badge ${log.status.toLowerCase()}`}
-                    >
-                      {log.status}
-                    </span>
-                  </td>
-
-                  <td>
-                    {log.retry_count ?? 0} /{" "}
-                    {log.max_retries ?? 3}
-                  </td>
-
-                  <td>
-                    Level{" "}
-                    {log.escalation_level ?? 0}
-                  </td>
-
-                  <td>
-                    {formatDate(log.sent_at)}
-                  </td>
-
-                  <td
-                    className="error-cell"
-                    title={
-                      log.error_message ||
-                      "No errors"
-                    }
-                  >
-                    {log.error_message
-                      ? log.error_message
-                      : "Delivered successfully"}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <div className="panel">
+        <div className="panel-header">
+          <div>
+            <h2>Delivery Log</h2>
+            <p>Full notification audit history.</p>
+          </div>
         </div>
-      )}
-    </div>
-  </>
-);
+
+        {notificationLogs.length === 0 ? (
+          <EmptyState
+            title="No notification history"
+            description="Notification attempts will be recorded here."
+          />
+        ) : (
+          <div className="data-table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Alert</th>
+                  <th>Recipient</th>
+                  <th>Channel</th>
+                  <th>Status</th>
+                  <th>Retries</th>
+                  <th>Escalation</th>
+                  <th>Time</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {notificationLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>#{log.id}</td>
+
+                    <td>
+                      #{log.alert_id || "-"}
+                    </td>
+
+                    <td>
+                      <div className="table-primary">
+                        {log.recipient}
+                      </div>
+                    </td>
+
+                    <td>{log.channel}</td>
+
+                    <td>
+                      <span
+                        className={`delivery-badge ${log.status.toLowerCase()}`}
+                      >
+                        {log.status}
+                      </span>
+                    </td>
+
+                    <td>
+                      {log.retry_count ?? 0} /{" "}
+                      {log.max_retries ?? 3}
+                    </td>
+
+                    <td>
+                      Level{" "}
+                      {log.escalation_level ?? 0}
+                    </td>
+
+                    <td>
+                      {formatDate(log.sent_at)}
+                    </td>
+
+                    <td
+                      className="error-cell"
+                      title={
+                        log.error_message ||
+                        "No errors"
+                      }
+                    >
+                      {log.error_message
+                        ? log.error_message
+                        : "Delivered successfully"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </>
+  );
   // ==========================================
   // ROUTING PAGE
   // ==========================================
@@ -1677,11 +1694,10 @@ const renderNotifications = () => (
 
                     <td>
                       <span
-                        className={`route-state ${
-                          route.is_active
+                        className={`route-state ${route.is_active
                             ? "active"
                             : "inactive"
-                        }`}
+                          }`}
                       >
                         {route.is_active
                           ? "Active"
@@ -1790,10 +1806,15 @@ const renderNotifications = () => (
     return <SettingsPage />;
   };
 
+  const renderIncidents = () => {
+    return <IncidentManagement />;
+  };
+
   const pages = {
     overview: renderOverview,
     kpis: renderKpis,
     alerts: renderAlerts,
+    incidents: renderIncidents,
     notifications: renderNotifications,
     routing: renderRoutingGuarded,
     users: renderUsers,
@@ -1848,10 +1869,20 @@ const renderNotifications = () => (
           />
 
           <NavButton
+            active={activePage === "incidents" || location.pathname === "/incidents"}
+            icon={<AlertTriangle size={18} style={{ color: "#f97316", display: "inline-block", verticalAlign: "middle" }} />}
+            label="Incidents"
+            onClick={() =>
+              handleNavigate("incidents", "/incidents")
+            }
+          />
+
+          <NavButton
             active={
               activePage === "notifications"
             }
             icon="✉"
+
             label="Notifications"
             onClick={() =>
               setActivePage("notifications")
@@ -1859,60 +1890,60 @@ const renderNotifications = () => (
           />
 
           {canManageRoutes() && (
-          <NavButton
-            active={activePage === "routing"}
-            icon="⇄"
-            label="Routing"
-            onClick={() =>
-              setActivePage("routing")
-            }
-          />
+            <NavButton
+              active={activePage === "routing"}
+              icon="⇄"
+              label="Routing"
+              onClick={() =>
+                setActivePage("routing")
+              }
+            />
           )}
 
           {canManageUsers() && (
-          <NavButton
-            active={activePage === "users"}
-            icon="👤"
-            label="Users"
-            onClick={() =>
-              setActivePage("users")
-            }
-          />
+            <NavButton
+              active={activePage === "users"}
+              icon="👤"
+              label="Users"
+              onClick={() =>
+                setActivePage("users")
+              }
+            />
           )}
 
           {canManageApiHub() && (
-          <NavButton
-            active={activePage === "api-hub"}
-            icon="🔌"
-            label="API Hub"
-            onClick={() =>
-              setActivePage("api-hub")
-            }
-          />
+            <NavButton
+              active={activePage === "api-hub"}
+              icon="🔌"
+              label="API Hub"
+              onClick={() =>
+                setActivePage("api-hub")
+              }
+            />
           )}
 
           {canAccessPredictiveAnalytics() && (
-          <NavButton
-            active={activePage === "predictive-analytics"}
-            icon="📈"
-            label="Predictive Analytics"
-            onClick={() =>
-              setActivePage("predictive-analytics")
-            }
-          />
+            <NavButton
+              active={activePage === "predictive-analytics"}
+              icon="📈"
+              label="Predictive Analytics"
+              onClick={() =>
+                setActivePage("predictive-analytics")
+              }
+            />
           )}
 
           {canAccessSimulationCenter() && (
-          <NavButton
-            active={activePage === "simulation-center"}
-            icon="🕹"
-            label="Simulation Center"
-            onClick={() =>
-              setActivePage("simulation-center")
-            }
-          />
+            <NavButton
+              active={activePage === "simulation-center"}
+              icon="🕹"
+              label="Simulation Center"
+              onClick={() =>
+                setActivePage("simulation-center")
+              }
+            />
           )}
-          
+
           <div style={{ marginTop: 'auto', paddingTop: '1rem', borderTop: '1px solid var(--border-color)' }}>
             <NavButton
               active={activePage === "profile"}
@@ -1943,11 +1974,10 @@ const renderNotifications = () => (
 
         <div className="sidebar-footer">
           <div
-            className={`system-dot ${
-              failedNotifications > 0
+            className={`system-dot ${failedNotifications > 0
                 ? "warning"
                 : ""
-            }`}
+              }`}
           />
 
           <div>
@@ -2025,9 +2055,8 @@ function NavButton({
 }) {
   return (
     <button
-      className={`nav-button ${
-        active ? "active" : ""
-      }`}
+      className={`nav-button ${active ? "active" : ""
+        }`}
       onClick={onClick}
     >
       <span className="nav-icon">
@@ -2121,8 +2150,8 @@ function HealthItem({
         {tone === "normal"
           ? "✓"
           : tone === "warning"
-          ? "!"
-          : "▲"}
+            ? "!"
+            : "▲"}
       </div>
 
       <div>
@@ -2226,10 +2255,10 @@ function AlertDetail({
 
   const deviationValue =
     alert.deviation_percentage !== null &&
-    alert.deviation_percentage !== undefined
+      alert.deviation_percentage !== undefined
       ? Math.abs(
-          Number(alert.deviation_percentage)
-        )
+        Number(alert.deviation_percentage)
+      )
       : null;
 
   const riskLevel =
@@ -2240,9 +2269,8 @@ function AlertDetail({
 
   return (
     <div
-      className={`alert-detail ${
-        expanded ? "expanded" : ""
-      }`}
+      className={`alert-detail ${expanded ? "expanded" : ""
+        }`}
     >
       <div className="alert-detail-heading">
         <div>
@@ -2252,11 +2280,10 @@ function AlertDetail({
             />
 
             <span
-              className={`state-indicator ${
-                alert.is_resolved
+              className={`state-indicator ${alert.is_resolved
                   ? "resolved"
                   : "active"
-              }`}
+                }`}
             >
               {alert.is_resolved
                 ? (alert.resolved_by === "SYSTEM" ? "Auto Resolved" : "Resolved")
@@ -2264,11 +2291,10 @@ function AlertDetail({
             </span>
 
             <span
-              className={`acknowledgement-badge ${
-                alert.is_acknowledged
+              className={`acknowledgement-badge ${alert.is_acknowledged
                   ? "acknowledged"
                   : "pending"
-              }`}
+                }`}
             >
               {alert.is_acknowledged
                 ? "Acknowledged"
@@ -2303,23 +2329,23 @@ function AlertDetail({
                 }
               >
                 {acknowledgingAlert ===
-                alert.id
+                  alert.id
                   ? "Acknowledging..."
                   : "Acknowledge"}
               </button>
             )}
 
-         {canResolveAlerts() && !alert.is_resolved &&
-  alert.is_acknowledged && (
-    <button
-      className="resolve-button"
-      onClick={() =>
-        onResolve(alert.id)
-      }
-    >
-      Resolve Alert
-    </button>
-  )}
+          {canResolveAlerts() && !alert.is_resolved &&
+            alert.is_acknowledged && (
+              <button
+                className="resolve-button"
+                onClick={() =>
+                  onResolve(alert.id)
+                }
+              >
+                Resolve Alert
+              </button>
+            )}
         </div>
       </div>
 
@@ -2353,7 +2379,7 @@ function AlertDetail({
           <strong
             className={
               notification?.status ===
-              "FAILED"
+                "FAILED"
                 ? "text-danger"
                 : "text-success"
             }
@@ -2393,8 +2419,8 @@ function AlertDetail({
           <strong>
             {alert.acknowledged_at
               ? formatDate(
-                  alert.acknowledged_at
-                )
+                alert.acknowledged_at
+              )
               : "-"}
           </strong>
         </div>
@@ -2415,8 +2441,8 @@ function AlertDetail({
           <strong>
             {alert.resolved_at
               ? formatDate(
-                  alert.resolved_at
-                )
+                alert.resolved_at
+              )
               : "-"}
           </strong>
         </div>
@@ -2501,8 +2527,8 @@ function AlertDetail({
               <strong>
                 {deviationValue !== null
                   ? `${deviationValue.toFixed(
-                      2
-                    )}%`
+                    2
+                  )}%`
                   : "-"}
               </strong>
 
@@ -2568,10 +2594,10 @@ function AlertDetail({
                       {typeof cause === "string"
                         ? cause
                         : cause.description ||
-                          cause.cause ||
-                          JSON.stringify(
-                            cause
-                          )}
+                        cause.cause ||
+                        JSON.stringify(
+                          cause
+                        )}
                     </p>
                   </div>
                 )
@@ -2617,10 +2643,10 @@ function AlertDetail({
                         {typeof action === "string"
                           ? action
                           : action.action ||
-                            action.description ||
-                            JSON.stringify(
-                              action
-                            )}
+                          action.description ||
+                          JSON.stringify(
+                            action
+                          )}
                       </p>
                     </div>
                   </div>
@@ -2653,27 +2679,27 @@ function AlertDetail({
                   const isObject =
                     item !== null &&
                     typeof item ===
-                      "object";
+                    "object";
 
                   const title = isObject
                     ? item.title ||
-                      item.event ||
-                      item.stage ||
-                      `Stage ${index + 1}`
+                    item.event ||
+                    item.stage ||
+                    `Stage ${index + 1}`
                     : `Stage ${index + 1}`;
 
                   const description =
                     isObject
                       ? item.description ||
-                        item.details ||
-                        item.message ||
-                        ""
+                      item.details ||
+                      item.message ||
+                      ""
                       : String(item);
 
                   const time = isObject
                     ? item.time ||
-                      item.timestamp ||
-                      item.created_at
+                    item.timestamp ||
+                    item.created_at
                     : null;
 
                   return (
@@ -2747,62 +2773,62 @@ function AlertDetail({
           </div>
         </>
       )}
-      <div style={{background:"red",padding:20,color:"white",fontWeight:"bold",marginBottom:20}}>
+      <div style={{ background: "red", padding: 20, color: "white", fontWeight: "bold", marginBottom: 20 }}>
         TEST NOTIFICATION HISTORY - If you see this, JSX is reachable!
       </div>
       <div className="analysis-section">
-  <div className="analysis-label">
-    Notification History
-  </div>
+        <div className="analysis-label">
+          Notification History
+        </div>
 
-  {loadingAlertDetails ? (
-    <p>Loading notification history...</p>
-  ) : alertDetails?.notificationHistory?.length ? (
-    <div className="data-table-wrapper">
-      <table className="data-table">
-        <thead>
-          <tr>
-            <th>Recipient</th>
-            <th>Status</th>
-            <th>Level</th>
-            <th>Retries</th>
-            <th>Time</th>
-          </tr>
-        </thead>
+        {loadingAlertDetails ? (
+          <p>Loading notification history...</p>
+        ) : alertDetails?.notificationHistory?.length ? (
+          <div className="data-table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Recipient</th>
+                  <th>Status</th>
+                  <th>Level</th>
+                  <th>Retries</th>
+                  <th>Time</th>
+                </tr>
+              </thead>
 
-        <tbody>
-          {alertDetails.notificationHistory.map((item) => (
-            <tr key={item.id}>
-              <td>{item.recipient}</td>
+              <tbody>
+                {alertDetails.notificationHistory.map((item) => (
+                  <tr key={item.id}>
+                    <td>{item.recipient}</td>
 
-              <td>
-                <span
-                  className={`delivery-badge ${(item.status || "").toLowerCase()}`}
-                >
-                  {item.status}
-                </span>
-              </td>
+                    <td>
+                      <span
+                        className={`delivery-badge ${(item.status || "").toLowerCase()}`}
+                      >
+                        {item.status}
+                      </span>
+                    </td>
 
-              <td>
-                Level {item.escalation_level}
-              </td>
+                    <td>
+                      Level {item.escalation_level}
+                    </td>
 
-              <td>
-                {item.retry_count}/{item.max_retries}
-              </td>
+                    <td>
+                      {item.retry_count}/{item.max_retries}
+                    </td>
 
-              <td>
-                {formatDate(item.sent_at)}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  ) : (
-    <p>No notification history available.</p>
-  )}
-</div>
+                    <td>
+                      {formatDate(item.sent_at)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p>No notification history available.</p>
+        )}
+      </div>
 
       {notification?.error_message && (
         <div className="analysis-section delivery-error">

@@ -16,7 +16,7 @@ const predictionRoutes = require("./routes/predictionRoutes");
 const simulationRoutes = require("./routes/simulationRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
-
+const incidentRoutes = require("./routes/incidentRoutes");
 
 require("dotenv").config();
 
@@ -51,6 +51,7 @@ app.use("/api", predictionRoutes);
 app.use("/api", simulationRoutes);
 app.use("/api", profileRoutes);
 app.use("/api", settingsRoutes);
+app.use("/api/incidents", incidentRoutes);
 // ==========================================
 // CONFIGURATION
 // ==========================================
@@ -148,10 +149,10 @@ async function runMigrations() {
       );
     `);
 
-    // Alter column size safely if table already existed with VARCHAR(16)
-    await pool.query(`
-      ALTER TABLE api_keys ALTER COLUMN key_prefix TYPE VARCHAR(32);
-    `).catch(() => {});
+    // Alter column size and add soft delete columns safely
+    await pool.query(`ALTER TABLE api_keys ALTER COLUMN key_prefix TYPE VARCHAR(32);`).catch(() => {});
+    await pool.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;`).catch(() => {});
+    await pool.query(`ALTER TABLE api_keys ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP NULL;`).catch(() => {});
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS api_request_logs (
@@ -266,7 +267,22 @@ async function runMigrations() {
       );
     `);
 
-    console.log("✅ Enterprise API Integration Hub, AI Predictive Analytics, KPI Simulator & Settings database tables ready");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ai_incident_analysis (
+        id SERIAL PRIMARY KEY,
+        incident_id INTEGER REFERENCES incidents(id) ON DELETE CASCADE UNIQUE,
+        incident_summary TEXT,
+        probable_root_cause TEXT,
+        business_impact TEXT,
+        recommended_actions TEXT,
+        estimated_resolution_time VARCHAR(100),
+        recommended_team VARCHAR(100),
+        confidence_score NUMERIC(5, 2) DEFAULT 95.0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    console.log("✅ Enterprise API Integration Hub, AI Predictive Analytics, KPI Simulator, Incident Management & Settings database tables ready");
   } catch (err) {
     console.error("❌ Migration error:", err.message);
   }

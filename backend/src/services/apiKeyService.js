@@ -32,8 +32,8 @@ class ApiKeyService {
 
     const result = await pool.query(
       `INSERT INTO api_keys (
-        key_name, api_key_hash, key_prefix, department_id, created_by, owner_name, description, expires_at
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        key_name, api_key_hash, key_prefix, department_id, created_by, owner_name, description, expires_at, is_deleted
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE)
       RETURNING id, key_name, key_prefix, department_id, created_by, owner_name, description, status, expires_at, created_at`,
       [
         key_name.trim(),
@@ -63,7 +63,7 @@ class ApiKeyService {
 
   /**
    * Get all API Keys (with department name).
-   * Never exposes api_key_hash.
+   * Filters out deleted keys (WHERE is_deleted = FALSE OR is_deleted IS NULL).
    */
   async getAllApiKeys() {
     const result = await pool.query(`
@@ -85,6 +85,7 @@ class ApiKeyService {
       FROM api_keys k
       LEFT JOIN departments d ON k.department_id = d.id
       LEFT JOIN users u ON k.created_by = u.id
+      WHERE (k.is_deleted = FALSE OR k.is_deleted IS NULL)
       ORDER BY k.created_at DESC
     `);
     return result.rows;
@@ -104,7 +105,7 @@ class ApiKeyService {
 
     const keyPrefix = `ank_live_${randomHex.slice(0, 6)}...`;
 
-    const existing = await pool.query("SELECT id, key_name FROM api_keys WHERE id = $1", [id]);
+    const existing = await pool.query("SELECT id, key_name FROM api_keys WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)", [id]);
     if (existing.rows.length === 0) {
       const err = new Error("API Key not found.");
       err.status = 404;
@@ -114,7 +115,7 @@ class ApiKeyService {
     const result = await pool.query(
       `UPDATE api_keys 
        SET api_key_hash = $1, key_prefix = $2, updated_at = CURRENT_TIMESTAMP
-       WHERE id = $3
+       WHERE id = $3 AND (is_deleted = FALSE OR is_deleted IS NULL)
        RETURNING id, key_name, key_prefix, department_id, status, expires_at, updated_at`,
       [keyHash, keyPrefix, id]
     );
@@ -142,7 +143,7 @@ class ApiKeyService {
       throw err;
     }
 
-    const existing = await pool.query("SELECT id, key_name FROM api_keys WHERE id = $1", [id]);
+    const existing = await pool.query("SELECT id, key_name FROM api_keys WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)", [id]);
     if (existing.rows.length === 0) {
       const err = new Error("API Key not found.");
       err.status = 404;
@@ -150,7 +151,7 @@ class ApiKeyService {
     }
 
     const result = await pool.query(
-      `UPDATE api_keys SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
+      `UPDATE api_keys SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 AND (is_deleted = FALSE OR is_deleted IS NULL) RETURNING *`,
       [status, id]
     );
 
@@ -164,10 +165,10 @@ class ApiKeyService {
   }
 
   /**
-   * Revoke an API Key.
+   * Revoke an API Key. Updates status = 'REVOKED' (does NOT delete).
    */
   async revokeApiKey(id, adminUserId) {
-    const existing = await pool.query("SELECT id, key_name FROM api_keys WHERE id = $1", [id]);
+    const existing = await pool.query("SELECT id, key_name FROM api_keys WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)", [id]);
     if (existing.rows.length === 0) {
       const err = new Error("API Key not found.");
       err.status = 404;
@@ -182,10 +183,54 @@ class ApiKeyService {
     await writeAuditLog({
       adminUserId,
       action: "REVOKE_API_KEY",
-      description: `Permanently revoked API Key '${existing.rows[0].key_name}' (#${id})`,
+      description: `Revoked API Key '${existing.rows[0].key_name}' (#${id})`,
     });
 
     return result.rows[0];
+  }
+
+  /**
+   * Permanently Delete an API Key from PostgreSQL.
+   * Unlinks dependent logs and executes hard DELETE + is_deleted soft flag.
+   */
+  async deleteApiKey(id, adminUserId) {
+    const existing = await pool.query(
+      "SELECT id, key_name FROM api_keys WHERE id = $1 AND (is_deleted = FALSE OR is_deleted IS NULL)",
+      [id]
+    );
+    if (existing.rows.length === 0) {
+      const err = new Error("API Key not found or already deleted.");
+      err.status = 404;
+      throw err;
+    }
+
+    const keyName = existing.rows[0].key_name;
+
+    // 1. Unlink dependent request logs
+    await pool.query("UPDATE api_request_logs SET api_key_id = NULL WHERE api_key_id = $1", [id]);
+
+    // 2. Perform hard SQL DELETE from api_keys
+    const hardDeleteRes = await pool.query(
+      "DELETE FROM api_keys WHERE id = $1 RETURNING id",
+      [id]
+    );
+
+    // If hard delete was prevented, set soft delete flag as backup
+    if (hardDeleteRes.rows.length === 0) {
+      await pool.query(
+        "UPDATE api_keys SET is_deleted = TRUE, deleted_at = CURRENT_TIMESTAMP WHERE id = $1",
+        [id]
+      );
+    }
+
+    // 3. Write audit log
+    await writeAuditLog({
+      adminUserId,
+      action: "DELETE_API_KEY",
+      description: `Permanently deleted API Key '${keyName}' (#${id})`,
+    });
+
+    return { id: Number(id), key_name: keyName };
   }
 }
 

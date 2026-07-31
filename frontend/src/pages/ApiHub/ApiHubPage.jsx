@@ -103,6 +103,11 @@ export default function ApiHubPage() {
     fetchHubData();
   }, []);
 
+  // Instant deletion handler
+  const handleDeleteKeySuccess = useCallback((deletedId) => {
+    setApiKeys((prev) => prev.filter((k) => Number(k.id) !== Number(deletedId)));
+  }, []);
+
   return (
     <div className="api-hub-page">
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -181,6 +186,7 @@ export default function ApiHubPage() {
             apiKeys={apiKeys}
             departments={departments}
             onRefresh={fetchHubData}
+            onDeleteSuccess={handleDeleteKeySuccess}
             addToast={addToast}
             authHeaders={authHeaders}
             apiUrl={API_URL}
