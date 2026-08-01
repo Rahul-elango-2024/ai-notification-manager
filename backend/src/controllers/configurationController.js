@@ -224,11 +224,126 @@ const deleteEscalationRule = async (req, res) => {
 };
 
 // ==========================================
+// CREATE NOTIFICATION ROUTE
+// ==========================================
+
+const createNotificationRoute = async (req, res) => {
+  try {
+    const { department_id, severity, recipient, channel } = req.body;
+
+    if (!department_id || !recipient) {
+      return res.status(400).json({
+        error: "department_id and recipient are required",
+      });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO notification_routes (department_id, severity, recipient, channel, is_active)
+       VALUES ($1, $2, $3, $4, true) RETURNING *`,
+      [department_id, severity || "WARNING", recipient, channel || "EMAIL"]
+    );
+
+    const route = result.rows[0];
+    const deptResult = await pool.query(
+      `SELECT name FROM departments WHERE id = $1`,
+      [route.department_id]
+    );
+    route.department = deptResult.rows[0]?.name || "Unknown";
+
+    res.status(201).json({
+      success: true,
+      message: "Notification route created successfully",
+      route,
+    });
+  } catch (error) {
+    console.error("Error creating notification route:", error);
+
+    if (error.code === "23505") {
+      return res.status(409).json({
+        error: "A notification route with these settings already exists",
+      });
+    }
+
+    res.status(500).json({
+      error: "Failed to create notification route",
+    });
+  }
+};
+
+// ==========================================
+// TOGGLE NOTIFICATION ROUTE
+// ==========================================
+
+const toggleNotificationRoute = async (req, res) => {
+  try {
+    const routeId = req.params.id;
+
+    const result = await pool.query(
+      `UPDATE notification_routes SET is_active = NOT is_active WHERE id = $1 RETURNING *`,
+      [routeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Notification route not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Notification route status updated successfully",
+      route: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Error toggling notification route:", error);
+
+    res.status(500).json({
+      error: "Failed to update notification route",
+    });
+  }
+};
+
+// ==========================================
+// DELETE NOTIFICATION ROUTE
+// ==========================================
+
+const deleteNotificationRoute = async (req, res) => {
+  try {
+    const routeId = req.params.id;
+
+    const result = await pool.query(
+      `DELETE FROM notification_routes WHERE id = $1 RETURNING *`,
+      [routeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        error: "Notification route not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Notification route deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting notification route:", error);
+
+    res.status(500).json({
+      error: "Failed to delete notification route",
+    });
+  }
+};
+
+// ==========================================
 // EXPORTS
 // ==========================================
 
 module.exports = {
   getNotificationRoutes,
+  createNotificationRoute,
+  toggleNotificationRoute,
+  deleteNotificationRoute,
   getEscalationRules,
   createEscalationRule,
   toggleEscalationRule,

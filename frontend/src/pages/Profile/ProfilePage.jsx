@@ -39,7 +39,7 @@ function useToast() {
   return { toasts, addToast, dismissToast };
 }
 
-export default function ProfilePage() {
+export default function ProfilePage({ onLogout }) {
   const [currentUser, setCurrentUser] = useState(() => authService.getCurrentUser());
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
@@ -101,25 +101,36 @@ export default function ProfilePage() {
 
       {/* Profile Header Banner */}
       <div className="profile-header-banner">
-        <div className="avatar-wrapper">
-          <div className="avatar-placeholder">
-            {currentUser.avatar}
-          </div>
-        </div>
-
-        <div className="header-info">
-          <div className="name-role-group">
-            <h1>{currentUser.fullName}</h1>
-            <span className="status-badge normal">
-              {currentUser.role}
-            </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+          <div className="avatar-wrapper">
+            <div className="avatar-placeholder">
+              {currentUser.avatar}
+            </div>
           </div>
 
-          <div className="header-meta-row">
-            <span>Email: {currentUser.email}</span>
-            <span>Department: {currentUser.department}</span>
+          <div className="header-info">
+            <div className="name-role-group">
+              <h1>{currentUser.fullName}</h1>
+              <span className="status-badge normal">
+                {currentUser.role}
+              </span>
+            </div>
+
+            <div className="header-meta-row">
+              <span>Email: {currentUser.email}</span>
+              <span>Department: {currentUser.department}</span>
+            </div>
           </div>
         </div>
+        {onLogout && (
+          <button 
+            className="secondary-button" 
+            onClick={onLogout}
+            style={{ borderColor: 'rgba(239, 68, 68, 0.5)', color: '#ef4444' }}
+          >
+            Logout
+          </button>
+        )}
       </div>
 
       {/* Main Profile Grid */}

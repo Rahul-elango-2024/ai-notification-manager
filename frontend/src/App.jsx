@@ -1839,7 +1839,7 @@ function App() {
   // PROFILE PAGE
   // ==========================================
   const renderProfile = () => {
-    return <ProfilePage />;
+    return <ProfilePage onLogout={handleLogout} />;
   };
 
   // ==========================================

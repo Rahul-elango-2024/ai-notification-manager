@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { executiveApi } from "../../services/executiveApi";
+import { authService } from "../../services/authService";
 
 import ExecutiveHeader from "../../components/executive/ExecutiveHeader";
 import ExecutiveKpis from "../../components/executive/ExecutiveKpis";
@@ -74,13 +75,16 @@ export default function ExecutiveCollaborationPage() {
 
   const handleActOnApproval = async (id, actionStatus) => {
     try {
-      const currentUserName = authService.getCurrentUser().fullName;
+      const currentUser = authService.getCurrentUser();
+      const currentUserName = currentUser?.fullName || "Executive Admin";
       setApprovals((prev) =>
         prev.map((a) => (a.id === id ? { ...a, status: actionStatus, approver_name: currentUserName } : a))
       );
       await executiveApi.actOnApproval(id, { status: actionStatus, approver_name: currentUserName });
     } catch (err) {
       console.error("Error acting on approval:", err);
+      // Revert optimistic update on failure
+      loadExecutiveData();
     }
   };
 
