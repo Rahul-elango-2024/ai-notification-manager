@@ -498,12 +498,13 @@ button:disabled {
   color: #ffffff;
   font-size: 13px;
   font-weight: 700;
-  transition: 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .primary-button:hover:not(:disabled) {
   background: var(--primary-hover);
   transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);
 }
 
 .secondary-button {
@@ -514,10 +515,13 @@ button:disabled {
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.secondary-button:hover {
+.secondary-button:hover:not(:disabled) {
   background: var(--background-secondary, var(--card));
+  color: var(--text-primary);
+  border-color: #94a3b8;
 }
 
 .danger-button {
@@ -528,10 +532,13 @@ button:disabled {
   color: #dc2626;
   font-size: 12px;
   font-weight: 600;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.danger-button:hover {
+.danger-button:hover:not(:disabled) {
   background: #fee2e2;
+  color: #b91c1c;
+  border-color: #f87171;
 }
 
 .text-button {

@@ -4,8 +4,7 @@ import { authService } from "../../services/authService";
 
 import ExecutiveHeader from "../../components/executive/ExecutiveHeader";
 import ExecutiveKpis from "../../components/executive/ExecutiveKpis";
-import PredictiveOverviewSection from "../../components/predictive/PredictiveOverviewSection";
-import TaskKanbanBoard from "../../components/executive/TaskKanbanBoard";
+import EnterpriseMessagingSystem from "../../components/executive/EnterpriseMessagingSystem";
 import ApprovalTable from "../../components/executive/ApprovalTable";
 import ExecutiveAIAssistant from "../../components/executive/ExecutiveAIAssistant";
 import ActivityFeed from "../../components/executive/ActivityFeed";
@@ -20,6 +19,7 @@ export default function ExecutiveCollaborationPage() {
   const [tasks, setTasks] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [activityFeed, setActivityFeed] = useState([]);
+  const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
@@ -30,17 +30,19 @@ export default function ExecutiveCollaborationPage() {
 
   const loadExecutiveData = useCallback(async () => {
     try {
-      const [ovData, taskData, appData, feedData] = await Promise.all([
+      const [ovData, taskData, appData, feedData, usersData] = await Promise.all([
         executiveApi.getOverview(),
         executiveApi.getTasks(),
         executiveApi.getApprovals(),
         executiveApi.getActivityFeed(),
+        executiveApi.getUsers(),
       ]);
 
       setOverview(ovData || {});
       setTasks(taskData || []);
       setApprovals(appData || []);
       setActivityFeed(feedData || []);
+      setUsers(usersData || []);
     } catch (err) {
       console.error("Error fetching Executive Collaboration telemetry:", err);
     } finally {
@@ -115,15 +117,8 @@ export default function ExecutiveCollaborationPage() {
           <div className="main-content-split-70-30">
             {/* Left Column (70%) */}
             <div className="left-70-col-flow">
-              {/* Operations Overview: Incident Trend (7 Days) + AI Risk Heatmap */}
-              <PredictiveOverviewSection />
-
-              {/* Response Tasks: Jira/Linear Kanban Board */}
-              <TaskKanbanBoard
-                tasks={tasks}
-                onTaskMove={handleTaskStateTransition}
-                onOpenTaskDetail={(t) => handleOpenDrawer(t, "TASK")}
-              />
+              {/* Enterprise Messaging System */}
+              <EnterpriseMessagingSystem />
 
               {/* Pending Approval Table */}
               <ApprovalTable

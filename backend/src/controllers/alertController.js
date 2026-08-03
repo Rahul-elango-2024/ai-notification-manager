@@ -1,4 +1,5 @@
 const pool = require("../db");
+const { emitEvent } = require("../socket/emitter");
 
 // ==========================================
 // GET ALL ALERTS
@@ -204,6 +205,11 @@ const acknowledgeAlert = async (req, res) => {
       `Alert #${alertId} acknowledged by ${acknowledged_by.trim()}`
     );
 
+    emitEvent("alertAcknowledged", {
+      alertId: Number(alertId), acknowledgedBy: acknowledged_by.trim(),
+      time: result.rows[0].acknowledged_at, alert: result.rows[0],
+    });
+
     res.json({
       success: true,
       message: "Alert acknowledged successfully",
@@ -269,6 +275,12 @@ const resolveAlert = async (req, res) => {
     console.log(
       `Alert #${alertId} resolved by ${resolved_by.trim()}`
     );
+
+    emitEvent("alertResolved", {
+      alertId: Number(alertId), resolvedBy: resolved_by.trim(),
+      resolutionNote: resolution_note.trim(), time: result.rows[0].resolved_at,
+      alert: result.rows[0],
+    });
 
     res.json({
       success: true,

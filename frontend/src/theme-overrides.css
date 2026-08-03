@@ -1,0 +1,78 @@
+/* Shared enterprise layer. Loaded after page CSS to eliminate per-page light-theme leaks. */
+:root {
+  --space-1: 8px;
+  --space-2: 12px;
+  --space-3: 16px;
+  --space-4: 24px;
+  --space-5: 32px;
+  --radius-sm: 8px;
+  --radius: 12px;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+/* Foundation: consistent contrast, controls, cards, and focus treatment. */
+[data-theme="dark"] :where(input, select, textarea) {
+  background: var(--input-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--input-border) !important;
+}
+[data-theme="dark"] :where(input, textarea)::placeholder { color: var(--text-muted) !important; opacity: 1; }
+[data-theme="dark"] :where(input, select, textarea):disabled,
+[data-theme="dark"] :where(input, textarea)[readonly] { background: var(--surface-hover) !important; color: var(--text-secondary) !important; opacity: 1; }
+[data-theme="dark"] :where(input, select, textarea):focus-visible,
+[data-theme="dark"] :where(button, a):focus-visible { outline: 2px solid var(--primary) !important; outline-offset: 2px; }
+
+[data-theme="dark"] :where(.panel, .section-card, .metric-card, .professional-kpi-card, .user-stat-card, .page-heading, .profile-header-banner, .about-item, .device-row, .activity-list li, .modal-content, .modal-card, .dialog-content) {
+  background: var(--card) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border) !important;
+  border-radius: var(--radius) !important;
+  box-shadow: var(--shadow);
+}
+[data-theme="dark"] :where(.panel, .section-card, .metric-card, .professional-kpi-card, .user-stat-card, .kanban-task-card):hover {
+  border-color: var(--border-strong) !important;
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-1px);
+}
+
+/* Tables remain compact, legible, and stable while their body scrolls. */
+[data-theme="dark"] :where(.data-table-wrapper, .table-responsive-wrapper) { max-height: min(62vh, 640px); overflow: auto; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+[data-theme="dark"] :where(.data-table th, .fixed-table th) { position: sticky; top: 0; z-index: 2; background: var(--surface) !important; color: var(--text-secondary) !important; border-color: var(--border) !important; }
+[data-theme="dark"] :where(.data-table td, .fixed-table td) { color: var(--text-primary) !important; border-color: var(--border) !important; }
+[data-theme="dark"] :where(.data-table tbody tr:hover, .fixed-table tbody tr:hover) { background: var(--surface-hover) !important; }
+[data-theme="dark"] :where(.table-primary, .table-task-link, .benefit-card strong, .ai-risk-card > strong) { color: var(--text-primary) !important; }
+[data-theme="dark"] :where(.table-secondary, .benefit-card p, .ai-risk-card > span, .ai-risk-card > small) { color: var(--text-secondary) !important; }
+
+/* Profile forms and all standard form panels. */
+[data-theme="dark"] .profile-page :where(label, .caption-text, .header-meta-row, small) { color: var(--text-secondary); }
+[data-theme="dark"] .profile-page .profile-form { gap: var(--space-3); }
+[data-theme="dark"] .profile-page .form-row { gap: var(--space-3); }
+[data-theme="dark"] .profile-page .secondary-button { align-self: flex-start; min-height: 38px; }
+
+/* Executive Collaboration previously carried a standalone light palette. */
+[data-theme="dark"] :where(.executive-collaboration-page, .executive-collaboration-page.full-width-page) { background: transparent !important; gap: var(--space-3); }
+[data-theme="dark"] :where(.kanban-column, .kanban-task-card, .chat-bubble, .chip-button, .fixed-table th) { background: var(--surface) !important; border-color: var(--border) !important; color: var(--text-primary) !important; }
+[data-theme="dark"] .kanban-column { min-height: 300px; padding: var(--space-2); border-radius: var(--radius); }
+[data-theme="dark"] .kanban-grid-5-col { gap: var(--space-2); }
+[data-theme="dark"] :where(.column-title, .task-card-name, .table-task-link, .chat-bubble) { color: var(--text-primary) !important; }
+[data-theme="dark"] :where(.col-count-badge, .kanban-column-header, .task-card-action-row, .prompt-buttons-group) { border-color: var(--border) !important; color: var(--text-secondary) !important; }
+[data-theme="dark"] .col-count-badge { background: var(--surface-hover) !important; }
+
+/* Consistent page density and responsive behavior. */
+.sidebar { overflow: hidden; }
+.sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }
+.sidebar-nav::-webkit-scrollbar { width: 6px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+.sidebar-footer { flex-shrink: 0; background: var(--sidebar); }
+.main-content { min-width: 0; }
+.page-heading h1, .main-title { font-size: clamp(26px, 2vw, 32px) !important; }
+.page-heading h2, .panel-header h2 { font-size: 22px !important; }
+.panel-header h3, .metric-card strong { font-size: 16px; }
+
+@media (min-width: 1500px) { .main-content { max-width: 1920px; } .content-area { padding: 24px 32px !important; } }
+@media (max-width: 1366px) { .content-area { padding: 20px 24px !important; } .kanban-grid-5-col { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; } }
+@media (max-width: 900px) { .content-area { padding: 16px !important; } .profile-header-banner { align-items: flex-start; } }
+@media (max-width: 640px) { .page-heading h1, .main-title { font-size: 26px !important; } .form-row, .activity-lists-grid { grid-template-columns: 1fr !important; } }

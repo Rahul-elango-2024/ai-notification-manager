@@ -78,21 +78,33 @@ export default function ProfilePage({ onLogout }) {
     addToast("Profile details updated successfully!", "success");
   };
 
-  const handleChangePassword = (e) => {
+  const handleChangePassword = async (e) => {
     e.preventDefault();
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      addToast("Please complete all password fields.", "error");
+      return;
+    }
+    if (newPassword.length < 8) {
+      addToast("New password must be at least 8 characters long.", "error");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       addToast("New password and confirm password do not match.", "error");
       return;
     }
 
     setSavingPassword(true);
-    setTimeout(() => {
-      setSavingPassword(false);
+    try {
+      await authService.updatePassword(currentPassword, newPassword);
       addToast("Password changed successfully!", "success");
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
-    }, 500);
+    } catch (error) {
+      addToast(error.message || "Failed to update password.", "error");
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   return (

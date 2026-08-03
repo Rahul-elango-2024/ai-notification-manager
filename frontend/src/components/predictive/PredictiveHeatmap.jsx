@@ -18,8 +18,7 @@ const PredictiveHeatmap = memo(function PredictiveHeatmap({ departmentRisks = []
     <div className="panel predictive-heatmap-panel" role="region" aria-label="Department Risk Predictive Heatmap">
       <div className="panel-header">
         <div>
-          <h2>🔥 Department Risk Predictive Heatmap</h2>
-          <p>Click any department card to open detailed prediction breakdown, affected KPIs, and trend analysis.</p>
+          <h2>🔥 Risk Heatmap</h2>
         </div>
       </div>
 

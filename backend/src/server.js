@@ -18,6 +18,8 @@ const profileRoutes = require("./routes/profileRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
 const incidentRoutes = require("./routes/incidentRoutes");
 const executiveRoutes = require("./routes/executiveRoutes");
+const chatRoutes = require("./routes/chatRoutes");
+const playbookRoutes = require("./routes/playbookRoutes");
 
 require("dotenv").config();
 
@@ -43,6 +45,8 @@ app.use("/api/health", healthRoutes);
 app.use("/api", configurationRoutes);
 app.use("/api", alertRoutes);
 app.use("/api", monitoringRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/playbooks", playbookRoutes);
 app.use("/api", kpiRoutes);
 app.use("/api", notificationRoutes);
 app.use("/api/auth", authRoutes);
@@ -57,6 +61,7 @@ app.use("/api", profileRoutes);
 app.use("/api", settingsRoutes);
 app.use("/api/incidents", incidentRoutes);
 app.use("/api/executive", executiveRoutes);
+app.use("/api", chatRoutes);
 app.use("/api", searchRoutes);
 app.use("/api", aiRoutes);
 // ==========================================
@@ -402,6 +407,42 @@ async function runMigrations() {
         type VARCHAR(20) DEFAULT 'INFO',
         message TEXT NOT NULL,
         is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Enterprise Messaging System Tables
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS online_status VARCHAR(20) DEFAULT 'offline';`).catch(() => {});
+    await pool.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen TIMESTAMP DEFAULT CURRENT_TIMESTAMP;`).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_rooms (
+        id SERIAL PRIMARY KEY,
+        type VARCHAR(20) NOT NULL,
+        name VARCHAR(100),
+        department VARCHAR(100),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_participants (
+        room_id INTEGER REFERENCES chat_rooms(id) ON DELETE CASCADE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        last_read_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (room_id, user_id)
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id SERIAL PRIMARY KEY,
+        room_id INTEGER REFERENCES chat_rooms(id) ON DELETE CASCADE,
+        sender_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        message_type VARCHAR(20) DEFAULT 'USER',
+        content TEXT NOT NULL,
+        attachments JSONB,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);

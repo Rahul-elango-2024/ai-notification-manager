@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import React from "react";
-import { io } from "socket.io-client";
 import { useLocation, useNavigate, Routes, Route } from "react-router-dom";
 import { AlertTriangle } from "lucide-react";
 import "./App.css";
 import Login from "./pages/Login";
 import { authService } from "./services/authService";
+import { getSocket } from "./services/socket";
 import UsersPage from "./pages/UsersPage";
 import ApiHubPage from "./pages/ApiHub/ApiHubPage";
 import PredictiveAnalyticsPage from "./pages/PredictiveAnalytics/PredictiveAnalyticsPage";
@@ -28,8 +28,6 @@ import {
   canAccessSettings,
 } from "./services/permissionService";
 const API_URL = "http://localhost:5000";
-
-const socket = io(API_URL);
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -95,7 +93,56 @@ function App() {
   const [searchResults, setSearchResults] = useState({ incidents: [], tasks: [], alerts: [], users: [], kpis: [] });
   const [notifOpen, setNotifOpen] = useState(false);
   const [unreadNotifCount, setUnreadNotifCount] = useState(3);
+  const [connectionStatus, setConnectionStatus] = useState("connecting");
+  const [realtimeToasts, setRealtimeToasts] = useState([]);
   const searchInputRef = useRef(null);
+
+  const [searchSelectedIndex, setSearchSelectedIndex] = useState(-1);
+
+  const addRealtimeToast = (message, type = "info") => {
+    const id = `${Date.now()}-${Math.random()}`;
+    setRealtimeToasts((items) => [...items, { id, message, type }]);
+    window.setTimeout(() => setRealtimeToasts((items) => items.filter((item) => item.id !== id)), 4500);
+  };
+
+  const flatSearchResults = useMemo(() => {
+    const flat = [];
+    if (searchResults.incidents) flat.push(...searchResults.incidents.map(i => ({ ...i, _type: 'incident', _label: i.title, _badge: 'INCIDENT', _badgeClass: 'badge-danger', _action: () => handleNavigate("incidents", "/incidents") })));
+    if (searchResults.tasks) flat.push(...searchResults.tasks.map(t => ({ ...t, _type: 'task', _label: t.title, _badge: 'TASK', _badgeClass: 'badge-warning', _action: () => setActivePage("executive-collaboration") })));
+    if (searchResults.alerts) flat.push(...searchResults.alerts.map(a => ({ ...a, _type: 'alert', _label: a.message, _badge: 'ALERT', _badgeClass: 'badge-primary', _action: () => setActivePage("alerts") })));
+    if (searchResults.users) flat.push(...searchResults.users.map(u => ({ ...u, _type: 'user', _label: `${u.name} (${u.role || u.department})`, _badge: 'USER', _badgeClass: 'badge-secondary', _action: () => setActivePage("users") })));
+    if (searchResults.kpis) flat.push(...searchResults.kpis.map(k => ({ ...k, _type: 'kpi', _label: k.name, _badge: 'KPI', _badgeClass: 'badge-success', _action: () => setActivePage("predictive-analytics") })));
+    return flat;
+  }, [searchResults]);
+
+  const handleSearchKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setSearchSelectedIndex(prev => (prev < flatSearchResults.length - 1 ? prev + 1 : prev));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSearchSelectedIndex(prev => (prev > 0 ? prev - 1 : prev));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (searchSelectedIndex >= 0 && searchSelectedIndex < flatSearchResults.length) {
+        flatSearchResults[searchSelectedIndex]._action();
+        setGlobalSearch("");
+        setSearchFocused(false);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setSearchFocused(false);
+      searchInputRef.current?.blur();
+    }
+  };
+
+  const renderHighlightedText = (text, query) => {
+    if (!query || typeof text !== 'string') return text;
+    const parts = text.split(new RegExp(`(${query})`, 'gi'));
+    return parts.map((part, i) => 
+      part.toLowerCase() === query.toLowerCase() ? <mark key={i} className="search-highlight">{part}</mark> : part
+    );
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -113,6 +160,7 @@ function App() {
   useEffect(() => {
     if (!globalSearch.trim()) {
       setSearchResults({ incidents: [], tasks: [], alerts: [], users: [], kpis: [] });
+      setSearchSelectedIndex(-1);
       return;
     }
 
@@ -773,18 +821,51 @@ function App() {
   // AUTO REFRESH
   // ==========================================
   useEffect(() => {
-    socket.on("connect", () => {
-      console.log("Connected:", socket.id);
-    });
+    const socket = getSocket();
+    setConnectionStatus(socket.connected ? "connected" : "connecting");
+    const mergeAlert = (event, changes = {}) => {
+      const alertId = event.alertId || event.alert?.id;
+      if (!alertId) return;
+      setAlerts((items) => items.map((item) => Number(item.id) === Number(alertId)
+        ? { ...item, ...event.alert, ...changes } : item));
+    };
+    const onConnect = () => setConnectionStatus("connected");
+    const onConnecting = () => setConnectionStatus("connecting");
+    const onDisconnect = () => setConnectionStatus("disconnected");
+    const onKpiUpdated = (event) => {
+      if (event.kpi) setKpis((items) => items.map((item) => Number(item.id) === Number(event.kpiId) ? { ...item, ...event.kpi } : item));
+    };
+    const onNewAlert = (event) => {
+      if (event.alert) setAlerts((items) => [event.alert, ...items.filter((item) => Number(item.id) !== Number(event.alert.id))]);
+      setUnreadNotifCount((count) => count + 1);
+      addRealtimeToast(`Critical Alert Created: ${event.kpi}`, "error");
+    };
+    const onAcknowledged = (event) => { mergeAlert(event, { is_acknowledged: true }); addRealtimeToast(`Alert #${event.alertId} acknowledged`, "info"); };
+    const onResolved = (event) => { mergeAlert(event, { is_resolved: true }); addRealtimeToast(`Alert #${event.alertId} resolved`, "success"); };
+    const onEscalated = (event) => { mergeAlert(event, { escalation_level: event.newLevel, escalation_status: "ESCALATED" }); addRealtimeToast(`Incident escalated to Level ${event.newLevel}`, "error"); };
+    const onAnalysis = (event) => {
+      setAlerts((items) => items.map((item) => Number(item.id) === Number(event.alertId) ? {
+        ...item, risk_score: event.riskScore, impact_summary: event.impactSummary,
+        possible_causes: event.possibleCauses, recommended_actions: event.recommendations, ai_timeline: event.timeline,
+      } : item));
+      addRealtimeToast("AI Analysis Completed", "info");
+    };
 
-    socket.on("newAlert", () => {
-      console.log("New alert received!");
-      fetchData(true);
-    });
+    socket.on("connect", onConnect);
+    socket.on("connect_error", onConnecting);
+    socket.on("reconnect_attempt", onConnecting);
+    socket.on("disconnect", onDisconnect);
+    socket.on("kpiUpdated", onKpiUpdated);
+    socket.on("newAlert", onNewAlert);
+    socket.on("alertAcknowledged", onAcknowledged);
+    socket.on("alertResolved", onResolved);
+    socket.on("incidentEscalated", onEscalated);
+    socket.on("aiAnalysisCompleted", onAnalysis);
 
     return () => {
-      socket.off("connect");
-      socket.off("newAlert");
+      socket.off("connect", onConnect); socket.off("connect_error", onConnecting); socket.off("reconnect_attempt", onConnecting); socket.off("disconnect", onDisconnect);
+      socket.off("kpiUpdated", onKpiUpdated); socket.off("newAlert", onNewAlert); socket.off("alertAcknowledged", onAcknowledged);
+      socket.off("alertResolved", onResolved); socket.off("incidentEscalated", onEscalated); socket.off("aiAnalysisCompleted", onAnalysis);
     };
   }, []);
 
@@ -1875,6 +1956,13 @@ function App() {
 
   return (
     <div className="app-shell">
+      <div className="toast-container" aria-live="polite">
+        {realtimeToasts.map((toast) => (
+          <div key={toast.id} className={`toast ${toast.type}`}>
+            <span>{toast.message}</span>
+          </div>
+        ))}
+      </div>
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-icon">
@@ -2056,6 +2144,10 @@ function App() {
           <div className="topbar-status-pill">
             <span className="status-dot-green">●</span> System status: <strong className="status-green-text">All systems operational</strong>
           </div>
+          <div className="topbar-status-pill" title="Real-time connection status">
+            <span className={connectionStatus === "connected" ? "status-dot-green" : "status-dot-yellow"}>●</span>
+            Real-time: <strong>{connectionStatus}</strong>
+          </div>
 
           <div className="topbar-right-utilities">
             {/* Global Search with Live Filter & Ctrl+K */}
@@ -2067,9 +2159,10 @@ function App() {
                 className="topbar-search-input"
                 placeholder="Search anything..."
                 value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
+                onChange={(e) => { setGlobalSearch(e.target.value); setSearchSelectedIndex(-1); }}
                 onFocus={() => setSearchFocused(true)}
                 onBlur={() => setTimeout(() => setSearchFocused(false), 200)}
+                onKeyDown={handleSearchKeyDown}
               />
               <kbd className="kbd-shortcut">Ctrl + K</kbd>
 
@@ -2078,44 +2171,25 @@ function App() {
                 <div className="topbar-search-results-dropdown">
                   <div className="dropdown-section-title">SEARCH RESULTS FOR "{globalSearch}"</div>
                   
-                  {(!searchResults.incidents?.length &&
-                    !searchResults.tasks?.length &&
-                    !searchResults.alerts?.length &&
-                    !searchResults.users?.length &&
-                    !searchResults.kpis?.length) ? (
+                  {flatSearchResults.length === 0 ? (
                     <div className="no-results-box p-3 text-center text-muted">
                       No Results Found
                     </div>
                   ) : (
                     <>
-                      {searchResults.incidents?.map((inc) => (
-                        <div key={`inc-${inc.id}`} className="search-result-item" onClick={() => handleNavigate("incidents", "/incidents")}>
-                          <span className="badge badge-danger">INCIDENT</span>
-                          <span className="result-text">{inc.title}</span>
-                        </div>
-                      ))}
-                      {searchResults.tasks?.map((t) => (
-                        <div key={`task-${t.id}`} className="search-result-item" onClick={() => setActivePage("executive-collaboration")}>
-                          <span className="badge badge-warning">TASK</span>
-                          <span className="result-text">{t.title}</span>
-                        </div>
-                      ))}
-                      {searchResults.alerts?.map((a) => (
-                        <div key={`alert-${a.id}`} className="search-result-item" onClick={() => setActivePage("alerts")}>
-                          <span className="badge badge-primary">ALERT</span>
-                          <span className="result-text">{a.message}</span>
-                        </div>
-                      ))}
-                      {searchResults.users?.map((u) => (
-                        <div key={`user-${u.id}`} className="search-result-item" onClick={() => setActivePage("users")}>
-                          <span className="badge badge-secondary">USER</span>
-                          <span className="result-text">{u.name} ({u.role || u.department})</span>
-                        </div>
-                      ))}
-                      {searchResults.kpis?.map((k) => (
-                        <div key={`kpi-${k.id}`} className="search-result-item" onClick={() => setActivePage("predictive-analytics")}>
-                          <span className="badge badge-success">KPI</span>
-                          <span className="result-text">{k.name}</span>
+                      {flatSearchResults.map((item, index) => (
+                        <div 
+                          key={`${item._type}-${item.id}`} 
+                          className={`search-result-item ${index === searchSelectedIndex ? 'selected' : ''}`} 
+                          onClick={() => {
+                            item._action();
+                            setGlobalSearch("");
+                            setSearchFocused(false);
+                          }}
+                          onMouseEnter={() => setSearchSelectedIndex(index)}
+                        >
+                          <span className={`badge ${item._badgeClass}`}>{item._badge}</span>
+                          <span className="result-text">{renderHighlightedText(item._label, globalSearch)}</span>
                         </div>
                       ))}
                     </>

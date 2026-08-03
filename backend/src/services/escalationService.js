@@ -1,5 +1,6 @@
 const pool = require("../db");
 const { sendEmailWithRetry } = require("../emailService");
+const { emitEvent } = require("../socket/emitter");
 
 const MAX_EMAIL_RETRIES = 3;
 const EMAIL_RETRY_DELAY = 5000;
@@ -143,6 +144,13 @@ async function startEscalation({
     console.log(
       `Alert #${alertId} automatically escalated to Level ${rule.escalation_level}`
     );
+    emitEvent("incidentEscalated", {
+      incidentId: alertId,
+      previousLevel: Number(alert.escalation_level || 0),
+      newLevel: Number(rule.escalation_level),
+      reason: "Automatic escalation rule triggered",
+      alert: escalatedAlert.rows[0],
+    });
 
     console.log(
       `Escalation recipient: ${rule.recipient}`
@@ -310,6 +318,13 @@ async function processTimedEscalations() {
       console.log(
         `Alert #${alert.id} escalated from Level ${currentLevel} to Level ${nextRule.escalation_level}`
       );
+      emitEvent("incidentEscalated", {
+        incidentId: alert.id,
+        previousLevel: currentLevel,
+        newLevel: Number(nextRule.escalation_level),
+        reason: "Timed escalation rule triggered",
+        alert: updateResult.rows[0],
+      });
 
       console.log(
         `Escalation recipient: ${nextRule.recipient}`
@@ -517,6 +532,13 @@ async function autoResolveAlert(kpi) {
       console.log(
         `${result.rows.length} alert(s) automatically resolved for ${kpi.kpi_name}`
       );
+      result.rows.forEach((alert) => emitEvent("alertResolved", {
+        alertId: alert.id,
+        resolvedBy: "SYSTEM",
+        resolutionNote: "Automatically resolved because KPI returned to NORMAL.",
+        time: new Date().toISOString(),
+        alert: { ...alert, is_resolved: true, resolved_by: "SYSTEM" },
+      }));
     }
   } catch (error) {
     console.error(

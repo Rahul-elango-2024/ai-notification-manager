@@ -1,23 +1,16 @@
-import React, { useState, useEffect, useCallback } from "react";
-import { io } from "socket.io-client";
+import React, { useState, useEffect } from "react";
 import { authService } from "../../services/authService";
+import { getSocket } from "../../services/socket";
 
-import PredictiveStats from "../../components/predictive/PredictiveStats";
-import PredictiveCharts from "../../components/predictive/PredictiveCharts";
-import PredictiveInsightsPanel from "../../components/predictive/PredictiveInsightsPanel";
-import PredictiveHeatmap from "../../components/predictive/PredictiveHeatmap";
-import PredictiveRecommendations from "../../components/predictive/PredictiveRecommendations";
-import TrendAnalysis from "../../components/predictive/TrendAnalysis";
-import RootCausePrediction from "../../components/predictive/RootCausePrediction";
-import ExecutiveForecast from "../../components/predictive/ExecutiveForecast";
+// New enterprise components
+import PredictiveKpiCards from "../../components/predictive/PredictiveKpiCards";
+import ForecastChart from "../../components/predictive/ForecastChart";
+import AIRecommendations from "../../components/predictive/AIRecommendations";
+import RiskHeatmap from "../../components/predictive/RiskHeatmap";
+import ForecastHistory from "../../components/predictive/ForecastHistory";
+import RecommendationModals from "../../components/predictive/RecommendationModals";
 
-import OverviewTab from "./tabs/OverviewTab";
-import ForecastsTab from "./tabs/ForecastsTab";
-import RiskPredictionTab from "./tabs/RiskPredictionTab";
-import AnomalyPredictionTab from "./tabs/AnomalyPredictionTab";
-import RecommendationsTab from "./tabs/RecommendationsTab";
-import PredictionHistoryTab from "./tabs/PredictionHistoryTab";
-import "../PredictiveAnalytics.css";
+import "./PredictiveAnalyticsPage.css";
 
 const API_URL = "http://localhost:5000";
 
@@ -30,237 +23,121 @@ function authHeaders() {
 }
 
 export default function PredictiveAnalyticsPage() {
-  const [activeTab, setActiveTab] = useState("all-dashboard"); // "all-dashboard" | "overview" | "forecasts" | "risk" | "anomalies" | "recommendations" | "history"
   const [overview, setOverview] = useState(null);
   const [forecasts, setForecasts] = useState([]);
   const [departmentRisks, setDepartmentRisks] = useState([]);
-  const [anomalies, setAnomalies] = useState([]);
   const [recommendations, setRecommendations] = useState([]);
+  const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchPredictiveData = async (isBackground = false) => {
-    if (isBackground) setRefreshing(true);
-    else setLoading(true);
+  const [detailsModalData, setDetailsModalData] = useState(null);
+  const [executeModalData, setExecuteModalData] = useState(null);
 
+  const fetchPredictiveData = async () => {
     try {
-      const [overviewRes, forecastsRes, riskRes, anomaliesRes, recsRes] = await Promise.all([
+      const [overviewRes, forecastsRes, riskRes, recsRes, histRes] = await Promise.all([
         fetch(`${API_URL}/api/predictions/overview`, { headers: authHeaders() }),
         fetch(`${API_URL}/api/predictions/forecast`, { headers: authHeaders() }),
         fetch(`${API_URL}/api/predictions/risk`, { headers: authHeaders() }),
-        fetch(`${API_URL}/api/predictions/anomalies`, { headers: authHeaders() }),
         fetch(`${API_URL}/api/predictions/recommendations`, { headers: authHeaders() }),
+        fetch(`${API_URL}/api/predictions/history?limit=10`, { headers: authHeaders() })
       ]);
 
       const overviewData = overviewRes.ok ? await overviewRes.json() : null;
       const forecastsData = forecastsRes.ok ? await forecastsRes.json() : [];
       const riskData = riskRes.ok ? await riskRes.json() : { departmentRisks: [] };
-      const anomaliesData = anomaliesRes.ok ? await anomaliesRes.json() : [];
       const recsData = recsRes.ok ? await recsRes.json() : [];
+      const histData = histRes.ok ? await histRes.json() : [];
 
-      setOverview(overviewData || {
-        overallRiskScore: 78,
-        overallRiskLevel: "HIGH",
-        predictedCriticalAlerts: 4,
-        predictedSlaBreaches: 2,
-        systemHealthScore: 91.4,
-        aiConfidenceScore: 94.8,
-      });
+      setOverview(overviewData);
       setForecasts(forecastsData);
       setDepartmentRisks(riskData.departmentRisks || []);
-      setAnomalies(anomaliesData);
       setRecommendations(recsData);
+      setHistory(histData);
     } catch (err) {
       console.error("Error fetching predictive data:", err);
     } finally {
       setLoading(false);
-      setRefreshing(false);
     }
   };
 
   useEffect(() => {
     fetchPredictiveData();
 
-    const socket = io(API_URL);
-    socket.on("predictionsUpdated", () => {
-      fetchPredictiveData(true);
-    });
+    const socket = getSocket();
+    socket.on("predictionsUpdated", fetchPredictiveData);
+    
+    const handlePlaybookExecuted = (data) => {
+      setRecommendations(prev => prev.map(r => 
+        r.id === data.recommendationId ? { ...r, status: 'COMPLETED' } : r
+      ));
+    };
+    
+    socket.on("playbook_executed", handlePlaybookExecuted);
 
     return () => {
-      socket.disconnect();
+      socket.off("predictionsUpdated", fetchPredictiveData);
+      socket.off("playbook_executed", handlePlaybookExecuted);
     };
   }, []);
 
-  // Export handlers
-  const handleExportPDF = () => {
-    window.print();
+  const handleExecuteStart = (rec) => {
+    setRecommendations((prev) => prev.map(r => r.id === rec.id ? { ...r, status: 'EXECUTING' } : r));
   };
 
-  const handleExportExcel = () => {
-    const csvContent = "data:text/csv;charset=utf-8," +
-      "Category,Metric,Score,Details\n" +
-      "AI Overview,Overall Risk Score,78,High Risk\n" +
-      "AI Overview,Predicted Incidents 24h,4,Action Needed\n" +
-      "AI Overview,System Health,91.4%,Optimal\n" +
-      "Department Risk,Infrastructure,84,Critical\n" +
-      "Department Risk,Payments,72,High\n";
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `predictive_analytics_report_${new Date().toISOString().split("T")[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  const handleExecuteSuccess = (rec) => {
+    setRecommendations((prev) => prev.map(r => r.id === rec.id ? { ...r, status: 'COMPLETED' } : r));
+    setExecuteModalData(null);
   };
+
+  if (loading) {
+    return <div className="loading-screen">Loading Predictive Analytics...</div>;
+  }
 
   return (
     <div className="predictive-analytics-page full-width-page">
-      {/* Page Heading */}
-      <header className="page-heading predictive-header enterprise-header-bar">
+      <header className="page-heading">
         <div className="header-title-block">
-          <span className="eyebrow">ENTERPRISE AI PREDICTIVE ENGINE</span>
-          <h1 className="main-title">Predictive AI Analytics & Forecasting</h1>
-          <p className="main-subtitle">
-            AI time-series models predict KPI trajectories, business risks, and early anomalies before operational thresholds are breached.
-          </p>
-        </div>
-
-        <div className="header-action-group">
-          <button className="secondary-button header-ctrl-btn" onClick={handleExportPDF} title="Print or save PDF report">
-            📄 Export PDF
-          </button>
-          <button className="secondary-button header-ctrl-btn" onClick={handleExportExcel} title="Export data to Excel/CSV">
-            📊 Export Excel
-          </button>
-          <button
-            className="primary-button header-ctrl-btn"
-            onClick={() => fetchPredictiveData(true)}
-            disabled={refreshing}
-          >
-            {refreshing ? "Refreshing AI Models..." : "↻ Refresh Forecasts"}
-          </button>
+          <h1 className="main-title">Predictive Analytics</h1>
         </div>
       </header>
 
-      {/* Navigation Sub-Tabs */}
-      <div className="hub-tabs-header">
-        <button
-          className={`hub-tab-button ${activeTab === "all-dashboard" ? "active" : ""}`}
-          onClick={() => setActiveTab("all-dashboard")}
-        >
-          <span className="tab-icon">✨</span> AI Executive Dashboard
-        </button>
+      <div className="predictive-dashboard-grid">
+        {/* 1. Executive KPI Cards */}
+        <PredictiveKpiCards overview={overview} />
 
-        <button
-          className={`hub-tab-button ${activeTab === "overview" ? "active" : ""}`}
-          onClick={() => setActiveTab("overview")}
-        >
-          <span className="tab-icon">🌐</span> KPI Overview
-        </button>
+        {/* Main 2-column layout */}
+        <div className="predictive-main-content">
+          <div className="predictive-col-left">
+            {/* 2. Forecast Chart */}
+            <ForecastChart forecasts={forecasts} />
+            
+            {/* 3. AI Recommendations */}
+            <AIRecommendations 
+              recommendations={recommendations}
+              onOpenDetails={setDetailsModalData}
+              onExecute={setExecuteModalData}
+            />
+          </div>
 
-        <button
-          className={`hub-tab-button ${activeTab === "forecasts" ? "active" : ""}`}
-          onClick={() => setActiveTab("forecasts")}
-        >
-          <span className="tab-icon">📈</span> Forecast Models ({forecasts.length})
-        </button>
-
-        <button
-          className={`hub-tab-button ${activeTab === "risk" ? "active" : ""}`}
-          onClick={() => setActiveTab("risk")}
-        >
-          <span className="tab-icon">📊</span> Risk Heatmap
-        </button>
-
-        <button
-          className={`hub-tab-button ${activeTab === "anomalies" ? "active" : ""}`}
-          onClick={() => setActiveTab("anomalies")}
-        >
-          <span className="tab-icon">⚡</span> Anomaly Alerts ({anomalies.length})
-        </button>
-
-        <button
-          className={`hub-tab-button ${activeTab === "recommendations" ? "active" : ""}`}
-          onClick={() => setActiveTab("recommendations")}
-        >
-          <span className="tab-icon">💡</span> AI Actions ({recommendations.length})
-        </button>
-
-        <button
-          className={`hub-tab-button ${activeTab === "history" ? "active" : ""}`}
-          onClick={() => setActiveTab("history")}
-        >
-          <span className="tab-icon">📜</span> Prediction Log
-        </button>
+          <div className="predictive-col-right">
+            {/* 4. Risk Heatmap */}
+            <RiskHeatmap departmentRisks={departmentRisks} />
+            
+            {/* 5. Forecast History */}
+            <ForecastHistory history={history} />
+          </div>
+        </div>
       </div>
 
-      {/* Content Body */}
-      {loading ? (
-        <div className="loading-screen">Calculating AI time-series predictions...</div>
-      ) : (
-        <div className="hub-tab-body">
-          {activeTab === "all-dashboard" && (
-            <div className="dashboard-content-flow">
-              {/* 1. AI Overview Dashboard Cards */}
-              <PredictiveStats overview={overview || {}} />
-
-              {/* 2. AI Forecast Charts */}
-              <PredictiveCharts forecasts={forecasts} />
-
-              {/* 3. Gemini AI Insights Panel */}
-              <PredictiveInsightsPanel anomalies={anomalies} />
-
-              {/* 4. Department Risk Predictive Heatmap */}
-              <PredictiveHeatmap departmentRisks={departmentRisks} />
-
-              {/* 5. AI Prescriptive Recommendations */}
-              <PredictiveRecommendations recommendations={recommendations} />
-
-              {/* 6. Trend Analysis & Seasonality */}
-              <TrendAnalysis />
-
-              {/* 7. Preemptive Root Cause Prediction */}
-              <RootCausePrediction />
-
-              {/* 8. Executive Forecast Matrix */}
-              <ExecutiveForecast />
-            </div>
-          )}
-
-          {activeTab === "overview" && (
-            <OverviewTab
-              overview={overview}
-              forecasts={forecasts}
-              departmentRisks={departmentRisks}
-              onNavigateTab={setActiveTab}
-            />
-          )}
-
-          {activeTab === "forecasts" && (
-            <ForecastsTab forecasts={forecasts} />
-          )}
-
-          {activeTab === "risk" && (
-            <RiskPredictionTab departmentRisks={departmentRisks} overview={overview} />
-          )}
-
-          {activeTab === "anomalies" && (
-            <AnomalyPredictionTab anomalies={anomalies} />
-          )}
-
-          {activeTab === "recommendations" && (
-            <RecommendationsTab recommendations={recommendations} />
-          )}
-
-          {activeTab === "history" && (
-            <PredictionHistoryTab
-              authHeaders={authHeaders}
-              apiUrl={API_URL}
-              addToast={() => {}}
-            />
-          )}
-        </div>
-      )}
+      <RecommendationModals 
+        detailsModalData={detailsModalData}
+        executeModalData={executeModalData}
+        onCloseDetails={() => setDetailsModalData(null)}
+        onCloseExecute={() => setExecuteModalData(null)}
+        onExecuteStart={handleExecuteStart}
+        onExecuteSuccess={handleExecuteSuccess}
+      />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 const API_URL = "http://localhost:5000/api/auth";
+const PROFILE_API_URL = "http://localhost:5000/api/profile";
 
 export const authService = {
   login: async (email, password) => {
@@ -39,6 +40,36 @@ export const authService = {
 
       if (!response.ok) {
         throw new Error(data.message || "Session invalid");
+      }
+
+      return data;
+    } catch (error) {
+      if (error.name === "TypeError") {
+        throw new Error("Network error. Please check your connection.");
+      }
+      throw error;
+    }
+  },
+
+  updatePassword: async (currentPassword, newPassword) => {
+    const token = authService.getToken();
+    if (!token) {
+      throw new Error("Your session has expired. Please log in again.");
+    }
+
+    try {
+      const response = await fetch(`${PROFILE_API_URL}/password`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || data.message || "Failed to update password.");
       }
 
       return data;

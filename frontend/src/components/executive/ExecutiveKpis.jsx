@@ -1,4 +1,5 @@
 import React, { useEffect, useState, memo } from "react";
+import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 function useAnimatedCounter(targetValue, duration = 800) {
   const [count, setCount] = useState(0);
@@ -33,68 +34,107 @@ const ExecutiveKpis = memo(function ExecutiveKpis({ overview = {} }) {
   const animIncidents = useAnimatedCounter(criticalIncidents);
   const animApprovals = useAnimatedCounter(pendingApprovals);
 
+  // Deterministic mock trends ending in actual values
+  const userTrend = [
+    { time: '1h', val: Math.max(0, onlineUsers - 6) },
+    { time: '30m', val: Math.max(0, onlineUsers - 2) },
+    { time: '15m', val: onlineUsers + 2 },
+    { time: 'Now', val: onlineUsers }
+  ];
+
+  const taskData = [
+    { name: 'Low', count: Math.floor(pendingTasks * 0.2) },
+    { name: 'Med', count: Math.floor(pendingTasks * 0.5) },
+    { name: 'High', count: pendingTasks - Math.floor(pendingTasks * 0.2) - Math.floor(pendingTasks * 0.5) }
+  ];
+
+  const incidentTrend = [
+    { time: '24h', count: 0 },
+    { time: '12h', count: 1 },
+    { time: '6h', count: Math.max(1, criticalIncidents - 1) },
+    { time: 'Now', count: criticalIncidents }
+  ];
+
+  const approvalData = [
+    { name: 'Pending', value: pendingApprovals },
+    { name: 'Approved', value: Math.max(1, Math.floor(pendingApprovals * 0.5)) }
+  ];
+  const approvalColors = ['#F59E0B', '#10B981'];
+
   return (
-    <div className="summary-kpis-grid" role="region" aria-label="Summary KPI Cards">
+    <div className="exec-summary-kpis-grid" role="region" aria-label="Summary KPI Cards">
       {/* 1. Online Users */}
-      <div className="kpi-card">
-        <div className="kpi-card-header">
-          <span className="kpi-title">Online Users</span>
+      <div className="exec-kpi-card">
+        <div className="exec-kpi-card-header">
+          <span className="exec-kpi-title">Online Users</span>
           <span className="badge badge-success">5 Active Rooms</span>
         </div>
-        <div className="kpi-card-body">
-          <span className="kpi-metric">{animUsers}</span>
-          <div className="sparkline-container">
-            <svg viewBox="0 0 100 24" className="sparkline-svg">
-              <path d="M0,18 Q20,12 40,16 T80,8 T100,12" fill="none" stroke="#16A34A" strokeWidth="2" />
-            </svg>
+        <div className="exec-kpi-card-body">
+          <span className="exec-kpi-metric">{animUsers}</span>
+          <div className="exec-sparkline-container" style={{ width: '100px', height: '36px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={userTrend}>
+                <Line type="monotone" dataKey="val" stroke="#10B981" strokeWidth={2} dot={false} isAnimationActive={false} />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
 
       {/* 2. Pending Tasks */}
-      <div className="kpi-card">
-        <div className="kpi-card-header">
-          <span className="kpi-title">Pending Tasks</span>
+      <div className="exec-kpi-card">
+        <div className="exec-kpi-card-header">
+          <span className="exec-kpi-title">Pending Tasks</span>
           <span className="badge badge-warning">2 Critical</span>
         </div>
-        <div className="kpi-card-body">
-          <span className="kpi-metric">{animTasks}</span>
-          <div className="sparkline-container">
-            <svg viewBox="0 0 100 24" className="sparkline-svg">
-              <path d="M0,14 Q25,20 50,10 T80,18 T100,8" fill="none" stroke="#7C3AED" strokeWidth="2" />
-            </svg>
+        <div className="exec-kpi-card-body">
+          <span className="exec-kpi-metric">{animTasks}</span>
+          <div className="exec-sparkline-container" style={{ width: '100px', height: '36px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={taskData}>
+                <Bar dataKey="count" fill="#7C3AED" radius={[2, 2, 0, 0]} isAnimationActive={false} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
 
       {/* 3. Critical Incidents */}
-      <div className="kpi-card">
-        <div className="kpi-card-header">
-          <span className="kpi-title">Critical Incidents</span>
+      <div className="exec-kpi-card">
+        <div className="exec-kpi-card-header">
+          <span className="exec-kpi-title">Critical Incidents</span>
           <span className="badge badge-danger">1 New</span>
         </div>
-        <div className="kpi-card-body">
-          <span className="kpi-metric">{animIncidents}</span>
-          <div className="sparkline-container">
-            <svg viewBox="0 0 100 24" className="sparkline-svg">
-              <path d="M0,20 Q30,18 60,6 T80,14 T100,4" fill="none" stroke="#DC2626" strokeWidth="2" />
-            </svg>
+        <div className="exec-kpi-card-body">
+          <span className="exec-kpi-metric">{animIncidents}</span>
+          <div className="exec-sparkline-container" style={{ width: '100px', height: '36px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={incidentTrend}>
+                <Area type="monotone" dataKey="count" stroke="#DC2626" fill="#DC2626" fillOpacity={0.2} strokeWidth={2} isAnimationActive={false} />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
 
       {/* 4. Approvals Pending */}
-      <div className="kpi-card">
-        <div className="kpi-card-header">
-          <span className="kpi-title">Approvals Pending</span>
+      <div className="exec-kpi-card">
+        <div className="exec-kpi-card-header">
+          <span className="exec-kpi-title">Approvals Pending</span>
           <span className="badge badge-warning">High Impact</span>
         </div>
-        <div className="kpi-card-body">
-          <span className="kpi-metric">{animApprovals}</span>
-          <div className="sparkline-container">
-            <svg viewBox="0 0 100 24" className="sparkline-svg">
-              <path d="M0,16 Q20,22 50,12 T80,18 T100,10" fill="none" stroke="#F59E0B" strokeWidth="2" />
-            </svg>
+        <div className="exec-kpi-card-body">
+          <span className="exec-kpi-metric">{animApprovals}</span>
+          <div className="exec-sparkline-container" style={{ width: '40px', height: '40px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={approvalData} dataKey="value" cx="50%" cy="50%" innerRadius={10} outerRadius={18} stroke="none" isAnimationActive={false}>
+                  {approvalData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={approvalColors[index % approvalColors.length]} />
+                  ))}
+                </Pie>
+              </PieChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>

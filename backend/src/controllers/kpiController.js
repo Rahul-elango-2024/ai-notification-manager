@@ -1,4 +1,5 @@
 const pool = require("../db");
+const { emitEvent } = require("../socket/emitter");
 
 exports.getAllKpis = async (req, res) => {
   try {
@@ -45,13 +46,18 @@ exports.addKpiReading = async (req, res) => {
 
     // Check that the KPI exists.
     const kpiResult = await pool.query(
-      `SELECT id, name FROM kpis WHERE id = $1 LIMIT 1`,
+      `SELECT id, name, unit FROM kpis WHERE id = $1 LIMIT 1`,
       [kpiId]
     );
 
     if (kpiResult.rows.length === 0) {
       return res.status(404).json({ error: "KPI not found" });
     }
+
+    const previousReading = await pool.query(
+      `SELECT value FROM kpi_readings WHERE kpi_id = $1 ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+      [kpiId]
+    );
 
     const result = await pool.query(
       `
@@ -68,6 +74,16 @@ exports.addKpiReading = async (req, res) => {
     const monitoringService = require("../services/monitoringService");
     const updatedMonitoring = await monitoringService.processMonitoring();
     const updatedKpi = updatedMonitoring ? updatedMonitoring.find((k) => String(k.id) === String(kpiId)) : null;
+
+    emitEvent("kpiUpdated", {
+      kpiId: Number(kpiId),
+      kpiName: kpiResult.rows[0].name,
+      currentValue: numericValue,
+      previousValue: previousReading.rows[0]?.value ?? null,
+      status: updatedKpi?.status || "NORMAL",
+      timestamp: result.rows[0].recorded_at,
+      kpi: updatedKpi,
+    });
 
     res.status(201).json({
       success: true,

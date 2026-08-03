@@ -57,7 +57,7 @@ const PredictiveCharts = memo(function PredictiveCharts() {
     <div className="section-card trend-chart-card">
       <div className="section-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <h2 className="section-title">AI Incident & KPI Telemetry Forecast</h2>
+          <h2 className="section-title">Forecast</h2>
           <span className="caption-text">Interactive Recharts Multi-Series Trend Line</span>
         </div>
         <div style={{ display: "flex", gap: "8px" }}>

@@ -1,0 +1,251 @@
+.exec-drawer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.exec-drawer-content {
+  width: 100%;
+  max-width: 650px;
+  background: #1e293b;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 25px rgba(0, 0, 0, 0.5);
+  animation: slideInRight 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  border-left: 1px solid #334155;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.exec-drawer-header {
+  padding: 24px;
+  border-bottom: 1px solid #334155;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background: #1e293b;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.exec-drawer-title {
+  margin: 8px 0 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+
+.exec-close-btn {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+  transition: color 0.2s;
+}
+
+.exec-close-btn:hover {
+  color: #f8fafc;
+}
+
+.exec-drawer-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.exec-drawer-two-column-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 32px;
+}
+
+.exec-drawer-main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.exec-drawer-side-col {
+  background: #0f172a;
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid #334155;
+  align-self: start;
+}
+
+.exec-drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exec-section-title-sm {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.exec-body-text {
+  margin: 0;
+  color: #e2e8f0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.exec-drawer-meta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.exec-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exec-meta-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.exec-meta-item strong {
+  font-size: 0.9rem;
+  color: #f8fafc;
+}
+
+/* Timeline */
+.exec-vertical-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+  position: relative;
+}
+
+.exec-vertical-timeline::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: #334155;
+}
+
+.exec-timeline-event {
+  display: flex;
+  gap: 16px;
+  position: relative;
+}
+
+.exec-timeline-node {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #3b82f6;
+  border: 2px solid #1e293b;
+  margin-top: 4px;
+  z-index: 1;
+}
+
+.exec-timeline-node.ai-node {
+  background: #8b5cf6;
+}
+
+.exec-timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exec-timeline-content strong {
+  font-size: 0.9rem;
+  color: #e2e8f0;
+}
+
+.exec-timeline-time {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.exec-drawer-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #334155;
+  background: #1e293b;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
+
+/* Base button styles applied locally to drawer */
+.exec-primary-button, .exec-secondary-button, .exec-danger-button {
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.exec-primary-button {
+  background: #3b82f6;
+  color: white;
+}
+.exec-primary-button:hover {
+  background: #2563eb;
+}
+
+.exec-secondary-button {
+  background: transparent;
+  border: 1px solid #475569;
+  color: #cbd5e1;
+}
+.exec-secondary-button:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.exec-danger-button {
+  background: transparent;
+  border: 1px solid #ef4444;
+  color: #ef4444;
+}
+.exec-danger-button:hover {
+  background: #ef4444;
+  color: white;
+}
+
+@media (max-width: 600px) {
+  .exec-drawer-two-column-grid {
+    grid-template-columns: 1fr;
+  }
+}

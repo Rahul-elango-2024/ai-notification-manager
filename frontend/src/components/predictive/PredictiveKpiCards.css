@@ -1,0 +1,94 @@
+.predictive-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.kpi-card {
+  background-color: #1e293b;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #334155;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 120px;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+.kpi-card-critical { border-top: 3px solid #ef4444; }
+.kpi-card-warning { border-top: 3px solid #f59e0b; }
+.kpi-card-normal { border-top: 3px solid #10b981; }
+
+.kpi-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: #94a3b8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.kpi-icon {
+  color: #64748b;
+}
+
+.kpi-value-container {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.kpi-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #f8fafc;
+  line-height: 1;
+}
+
+.kpi-unit {
+  font-size: 0.85rem;
+  color: #94a3b8;
+}
+
+.kpi-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  margin-top: 8px;
+}
+
+.kpi-trend {
+  font-weight: 600;
+}
+
+.trend-up { color: #ef4444; } /* Up in risk/incidents is bad usually, but depends on context. Adjust as needed. */
+.trend-down { color: #10b981; }
+
+.kpi-card:last-child .trend-up { color: #10b981; } /* Health up is good */
+.kpi-card:last-child .trend-down { color: #ef4444; } /* Health down is bad */
+
+.kpi-trend-label {
+  color: #64748b;
+}
+
+@media (max-width: 1200px) {
+  .predictive-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+  .predictive-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 480px) {
+  .predictive-kpi-grid { grid-template-columns: 1fr; }
+}

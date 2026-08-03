@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { io } from "socket.io-client";
 import { authService } from "../../services/authService";
+import { getSocket } from "../../services/socket";
 import OverviewTab from "./tabs/OverviewTab";
 import ScenariosTab from "./tabs/ScenariosTab";
 import LiveSimulationTab from "./tabs/LiveSimulationTab";
@@ -91,7 +91,7 @@ export default function SimulationCenterPage() {
     fetchSimulationData();
 
     // Socket.IO Real-Time Simulation Stream Listener
-    const socket = io(API_URL);
+    const socket = getSocket();
     socket.on("simulationTick", (payload) => {
       if (payload.status) setStatus(payload.status);
       if (payload.monitoringData) setMonitoringData(payload.monitoringData);
@@ -102,7 +102,8 @@ export default function SimulationCenterPage() {
     });
 
     return () => {
-      socket.disconnect();
+      socket.off("simulationTick");
+      socket.off("monitoringUpdated");
     };
   }, []);
 

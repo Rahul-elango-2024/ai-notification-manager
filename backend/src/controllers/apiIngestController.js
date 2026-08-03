@@ -1,6 +1,7 @@
 const pool = require("../db");
 const { processMonitoring } = require("../services/monitoringService");
 const webhookService = require("../services/webhookService");
+const { emitEvent } = require("../socket/emitter");
 
 exports.ingestKpiData = async (req, res) => {
   const startTime = Date.now();
@@ -84,6 +85,11 @@ exports.ingestKpiData = async (req, res) => {
     const recordedAt = timestamp && !Number.isNaN(Date.parse(timestamp)) ? new Date(timestamp) : new Date();
     const ingestSource = source ? String(source).trim() : `API (${req.apiKey.key_name})`;
 
+    const previousReading = await pool.query(
+      `SELECT value FROM kpi_readings WHERE kpi_id = $1 ORDER BY recorded_at DESC, id DESC LIMIT 1`,
+      [kpiObj.id]
+    );
+
     // 3. Insert Reading into kpi_readings
     const readingResult = await pool.query(
       `INSERT INTO kpi_readings (kpi_id, value, source, recorded_at)
@@ -105,6 +111,16 @@ exports.ingestKpiData = async (req, res) => {
     // Determine status of updated KPI
     const updatedKpiStatus = monitoringResults.find((m) => Number(m.id) === Number(kpiObj.id));
     const currentStatus = updatedKpiStatus ? updatedKpiStatus.status : "NORMAL";
+
+    emitEvent("kpiUpdated", {
+      kpiId: kpiObj.id,
+      kpiName: kpiObj.name,
+      currentValue: numericValue,
+      previousValue: previousReading.rows[0]?.value ?? null,
+      status: currentStatus,
+      timestamp: newReading.recorded_at,
+      kpi: updatedKpiStatus,
+    });
 
     // 5. Trigger Webhooks for KPI ingest event
     if (currentStatus === "CRITICAL") {

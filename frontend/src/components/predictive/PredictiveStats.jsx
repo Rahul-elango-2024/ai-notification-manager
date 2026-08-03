@@ -48,59 +48,59 @@ const PredictiveStats = memo(function PredictiveStats({ overview = {} }) {
           <span className="stat-number">{animHealth}.4%</span>
           <span className="stat-trend badge-success">Optimal</span>
         </div>
-        <span className="stat-subtext">Aggregated telemetry health</span>
+        <span className="stat-subtext">Health</span>
       </div>
 
       {/* 2. Predicted Incidents (24h) */}
       <div className="inc-stat-card card-open accent-amber glow-amber">
         <div className="stat-header">
-          <span className="stat-label">Predicted Incidents (24h)</span>
+          <span className="stat-label">Incidents</span>
           <div className="stat-icon icon-amber-large">🔮</div>
         </div>
         <div className="stat-value-group">
           <span className="stat-number">{animIncidents}</span>
           <span className="stat-trend badge-urgent">Forecasted</span>
         </div>
-        <span className="stat-subtext">Expected in next 24 hours</span>
+        <span className="stat-subtext">24h forecast</span>
       </div>
 
       {/* 3. Predicted SLA Breaches */}
       <div className="inc-stat-card card-progress accent-purple glow-purple">
         <div className="stat-header">
-          <span className="stat-label">Predicted SLA Breaches</span>
+          <span className="stat-label">SLA Breaches</span>
           <div className="stat-icon icon-purple-large">⚠️</div>
         </div>
         <div className="stat-value-group">
           <span className="stat-number">{animBreaches}</span>
           <span className="stat-trend badge-critical">Attention Needed</span>
         </div>
-        <span className="stat-subtext">Target SLA risk threshold</span>
+        <span className="stat-subtext">SLA risk</span>
       </div>
 
       {/* 4. Predicted Business Risk */}
       <div className="inc-stat-card card-critical accent-red glow-red">
         <div className="stat-header">
-          <span className="stat-label">Predicted Business Risk</span>
+          <span className="stat-label">Business Risk</span>
           <div className="stat-icon icon-red-large">🧠</div>
         </div>
         <div className="stat-value-group">
           <span className="stat-number">{animRisk}<small className="stat-unit">/100</small></span>
           <span className="stat-trend badge-urgent">High Exposure</span>
         </div>
-        <span className="stat-subtext">Multi-department risk score</span>
+        <span className="stat-subtext">Enterprise risk</span>
       </div>
 
       {/* 5. AI Confidence Score */}
       <div className="inc-stat-card card-total accent-blue glow-blue">
         <div className="stat-header">
-          <span className="stat-label">AI Confidence Score</span>
+          <span className="stat-label">AI Confidence</span>
           <div className="stat-icon icon-blue-large">⚡</div>
         </div>
         <div className="stat-value-group">
           <span className="stat-number">{animConfidence}.8%</span>
           <span className="stat-trend badge-active">Gemini v2.4</span>
         </div>
-        <span className="stat-subtext">Statistical model accuracy</span>
+        <span className="stat-subtext">Confidence</span>
       </div>
 
       {/* 6. Trend Direction */}
@@ -113,7 +113,7 @@ const PredictiveStats = memo(function PredictiveStats({ overview = {} }) {
           <span className="stat-number">STABLE</span>
           <span className="stat-trend badge-success">0.4% MoM</span>
         </div>
-        <span className="stat-subtext">7-day drift vector balance</span>
+        <span className="stat-subtext">7-day trend</span>
       </div>
     </div>
   );

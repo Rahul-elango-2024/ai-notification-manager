@@ -3,6 +3,7 @@ const { autoResolveAlert, startEscalation } = require("./escalationService");
 const { generateAIAnalysis } = require("../aiService");
 const { sendEmailWithRetry } = require("../emailService");
 const { getIo } = require("../socket/index");
+const { emitEvent } = require("../socket/emitter");
 const predictionService = require("./predictionService");
 
 const MAX_EMAIL_RETRIES = 3;
@@ -213,7 +214,8 @@ const processMonitoring = async () => {
         continue;
       }
 
-      const alertId = newAlert.rows[0].id;
+      const alert = newAlert.rows[0];
+      const alertId = alert.id;
 
       // ==========================================
       // SOCKET.IO REAL-TIME NOTIFICATION
@@ -221,12 +223,22 @@ const processMonitoring = async () => {
       try {
         const io = getIo();
         if (io) {
-          io.emit("newAlert", {
-            id: alertId,
-            kpi_name: kpi.kpi_name,
-            department: kpi.department,
-            status: kpi.status,
-            current_value: kpi.current_value,
+          emitEvent("newAlert", {
+            alertId,
+            kpi: kpi.kpi_name,
+            severity: kpi.status,
+            riskScore: alert.risk_score,
+            aiSummary: alert.impact_summary,
+            timestamp: alert.created_at,
+            alert: { ...alert, kpi_name: kpi.kpi_name, department: kpi.department },
+          });
+          emitEvent("aiAnalysisCompleted", {
+            alertId,
+            riskScore: alert.risk_score,
+            possibleCauses: alert.possible_causes,
+            recommendations: alert.recommended_actions,
+            timeline: alert.ai_timeline,
+            impactSummary: alert.impact_summary,
           });
         }
       } catch (err) {
