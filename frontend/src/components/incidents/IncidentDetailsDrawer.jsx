@@ -1,17 +1,40 @@
 import React, { useState, memo } from "react";
+import { FileText, Bot, Search, Briefcase, ShieldCheck, MessageSquare, Clock3, FileSearch, X, ChevronDown, CheckCircle2 } from "lucide-react";
 import PriorityBadge from "./PriorityBadge";
 import StatusBadge from "./StatusBadge";
 import Timeline from "./Timeline";
 
+const AccordionSection = ({ icon: Icon, title, subtitle, isExpanded, onToggle, children }) => {
+  return (
+    <div className={`enterprise-accordion ${!isExpanded ? 'collapsed' : ''}`}>
+      <button type="button" className="accordion-header" onClick={onToggle} aria-expanded={isExpanded}>
+        <div className="accordion-header-left">
+          <span className="accordion-icon-wrap">
+            <Icon size={22} strokeWidth={2} className="accordion-icon" />
+          </span>
+          <div className="accordion-title-block">
+            <h3 className="accordion-title">{title}</h3>
+            <span className="accordion-subtitle">{subtitle}</span>
+          </div>
+        </div>
+        <ChevronDown size={20} strokeWidth={2} className="accordion-chevron" />
+      </button>
+      <div className="accordion-content">
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const IncidentDetailsDrawer = memo(function IncidentDetailsDrawer({
   isOpen,
   onClose,
-  incidentData, // { incident, timeline, ai_analysis }
+  incidentData,
   loading = false,
 }) {
   const [collapsedSections, setCollapsedSections] = useState({
-    overview: false,
-    ai: false,
+    riskSummary: false,
+    aiAnalysis: false,
     rootCause: false,
     impact: false,
     recommended: false,
@@ -40,6 +63,7 @@ const IncidentDetailsDrawer = memo(function IncidentDetailsDrawer({
   };
 
   const confidenceScore = Number(ai.confidence_score) || 95;
+  const confidenceBucket = Math.min(100, Math.max(10, Math.round(confidenceScore / 10) * 10));
 
   const toggleSection = (sectionKey) => {
     setCollapsedSections((prev) => ({
@@ -63,21 +87,28 @@ const IncidentDetailsDrawer = memo(function IncidentDetailsDrawer({
     setNewComment("");
   };
 
+  const recommendations = ai.recommended_actions 
+    ? ai.recommended_actions.split('\n').filter(Boolean)
+    : incident.recommended_actions 
+      ? incident.recommended_actions.split('\n').filter(Boolean)
+      : ["Increase database pool size limit.", "Enable automatic rate limiting on ingestion endpoints."];
+
   return (
     <div className="drawer-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-label="Incident Details Panel">
-      <div className="drawer-panel enterprise-drawer-panel-45" onClick={(e) => e.stopPropagation()}>
-        {/* Sticky Header */}
-        <div className="drawer-header sticky-drawer-header">
-          <div>
-            <span className="drawer-eyebrow">{incident.incident_number || "INCIDENT DETAILS"}</span>
-            <h2 className="drawer-title">{incident.title || "Loading Incident Details..."}</h2>
+      <div className="drawer-panel enterprise-drawer" onClick={(e) => e.stopPropagation()}>
+        {/* Enterprise Header */}
+        <div className="enterprise-header">
+          <div className="enterprise-header-left">
+            <span className="enterprise-incident-id">{incident.incident_number || "INC-2049"}</span>
+            <h2 className="enterprise-incident-title">{incident.title || "Loading Incident Details..."}</h2>
+            <StatusBadge status={incident.status} />
+            <PriorityBadge priority={incident.severity || incident.priority} />
           </div>
-          <button className="drawer-close-btn" onClick={onClose} title="Close drawer" aria-label="Close drawer">
-            ✕
+          <button className="enterprise-close-btn" onClick={onClose} aria-label="Close drawer">
+            <X size={24} />
           </button>
         </div>
 
-        {/* Content Body */}
         {loading ? (
           <div className="drawer-skeleton-loading">
             <div className="skeleton-bar title" />
@@ -87,323 +118,192 @@ const IncidentDetailsDrawer = memo(function IncidentDetailsDrawer({
             <div className="skeleton-box" />
           </div>
         ) : (
-          <div className="drawer-body">
-            {/* Quick Status Bar */}
-            <div className="drawer-status-strip">
-              <div className="strip-item">
-                <span className="strip-label">Status</span>
-                <StatusBadge status={incident.status} />
+          <div className="enterprise-drawer-body">
+            {/* 4 Summary Cards */}
+            <div className="enterprise-summary-grid">
+              <div className="enterprise-summary-card">
+                <span className="summary-label">STATUS</span>
+                <div className="summary-value-wrapper"><StatusBadge status={incident.status} /></div>
               </div>
-              <div className="strip-item">
-                <span className="strip-label">Severity</span>
-                <PriorityBadge priority={incident.severity || incident.priority} />
+              <div className="enterprise-summary-card">
+                <span className="summary-label">SEVERITY</span>
+                <div className="summary-value-wrapper"><PriorityBadge priority={incident.severity || incident.priority} /></div>
               </div>
-              <div className="strip-item">
-                <span className="strip-label">Category</span>
-                <span className="strip-value">{incident.category || "Infrastructure"}</span>
+              <div className="enterprise-summary-card">
+                <span className="summary-label">CATEGORY</span>
+                <span className="summary-value">{incident.category || "Infrastructure"}</span>
+              </div>
+              <div className="enterprise-summary-card">
+                <span className="summary-label">OWNER</span>
+                <span className="summary-value">{incident.assignee_name || (incident.assigned_to ? `User #${incident.assigned_to}` : "Unassigned")}</span>
               </div>
             </div>
 
-            {/* SECTION 1: OVERVIEW */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("overview")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">📋</span>
-                  <div>
-                    <h3 className="section-heading">Incident Overview & Info</h3>
-                    <span className="section-subtitle">Basic metadata and assignee details</span>
+            {/* 1. RISK SUMMARY */}
+            <AccordionSection
+              icon={FileText}
+              title="Risk Summary"
+              subtitle="Calculated risk score and standard deviation"
+              isExpanded={!collapsedSections.riskSummary}
+              onToggle={() => toggleSection("riskSummary")}
+            >
+              <div className="metadata-grid">
+                <div className="risk-score-block">
+                  <div className="risk-header">
+                    <span className="metadata-label">AI CONFIDENCE SCORE</span>
+                    <span className="risk-percentage">{confidenceScore}%</span>
+                  </div>
+                  <div className="risk-track">
+                    <div className={`risk-fill risk-fill-${confidenceBucket}`} />
                   </div>
                 </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.overview ? "▶" : "▼"}
-                </span>
+                <div className="metadata-cell">
+                  <span className="metadata-label">DEVIATION</span>
+                  <p className="metadata-value warning-text">+{(incident.deviation || 12.4).toFixed(1)}%</p>
+                </div>
               </div>
-              {!collapsedSections.overview && (
-                <div className="accordion-content-body animated-content">
-                  <div className="info-grid">
-                    <div className="info-cell full-width">
-                      <span className="info-label">Description</span>
-                      <p className="info-description">{incident.description || "No description provided."}</p>
-                    </div>
+            </AccordionSection>
 
-                    <div className="info-cell">
-                      <span className="info-label">Assigned Engineer</span>
-                      <span className="info-value highlighted">
-                        👤 {incident.assignee_name || (incident.assigned_to ? `User #${incident.assigned_to}` : "Unassigned")}
-                      </span>
-                    </div>
-
-                    <div className="info-cell">
-                      <span className="info-label">Created By</span>
-                      <span className="info-value">
-                        👤 {incident.creator_name || (incident.created_by ? `User #${incident.created_by}` : "System")}
-                      </span>
-                    </div>
-
-                    <div className="info-cell">
-                      <span className="info-label">Created Time</span>
-                      <span className="info-value">{formatDate(incident.created_at)}</span>
-                    </div>
-
-                    <div className="info-cell">
-                      <span className="info-label">Last Updated</span>
-                      <span className="info-value">{formatDate(incident.updated_at)}</span>
-                    </div>
-
-                    {incident.resolved_at && (
-                      <div className="info-cell full-width resolve-highlight">
-                        <span className="info-label">Resolved Time</span>
-                        <span className="info-value green-text">
-                          ✅ {formatDate(incident.resolved_at)}
-                        </span>
-                      </div>
-                    )}
+            {/* 2. AI DIAGNOSTIC ANALYSIS */}
+            <AccordionSection
+              icon={Bot}
+              title="AI Diagnostic Analysis"
+              subtitle="Automated summary and behavior tracking"
+              isExpanded={!collapsedSections.aiAnalysis}
+              onToggle={() => toggleSection("aiAnalysis")}
+            >
+              {ai.incident_summary ? (
+                <div className="ai-analysis-layout">
+                  <div className="ai-summary-block">
+                    <p className="metadata-value">{ai.incident_summary}</p>
                   </div>
                 </div>
+              ) : (
+                <p className="empty-state">No AI Analysis generated for this incident.</p>
               )}
-            </div>
+            </AccordionSection>
 
-            {/* SECTION 2: AI ANALYSIS */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("ai")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">🤖</span>
-                  <div>
-                    <h3 className="section-heading ai-heading">AI Diagnostic Analysis</h3>
-                    <span className="section-subtitle">Gemini-powered root cause & risk score</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.ai ? "▶" : "▼"}
-                </span>
+            {/* 3. ROOT CAUSE */}
+            <AccordionSection
+              icon={Search}
+              title="Probable Root Cause"
+              subtitle="Underlying trigger identified by analysis"
+              isExpanded={!collapsedSections.rootCause}
+              onToggle={() => toggleSection("rootCause")}
+            >
+              <div className="highlight-card warning">
+                <p className="metadata-value">{ai.probable_root_cause || incident.root_cause || "Primary root cause: Connection pool starvation under peak concurrent API traffic."}</p>
               </div>
-              {!collapsedSections.ai && (
-                <div className="accordion-content-body animated-content">
-                  {ai.incident_summary ? (
-                    <div className="ai-analysis-card">
-                      <div className="confidence-meter-group">
-                        <div className="confidence-meter-header">
-                          <span className="meter-label">AI Diagnostic Confidence</span>
-                          <span className="meter-score">{confidenceScore}%</span>
-                        </div>
-                        <div className="confidence-progress-track">
-                          <div
-                            className="confidence-progress-fill"
-                            style={{ width: `${Math.min(Math.max(confidenceScore, 10), 100)}%` }}
-                          />
-                        </div>
-                      </div>
+            </AccordionSection>
 
-                      <div className="ai-field-group">
-                        <span className="ai-field-title">AI Diagnostic Summary</span>
-                        <p className="ai-field-text">{ai.incident_summary}</p>
+            {/* 4. BUSINESS IMPACT */}
+            <AccordionSection
+              icon={Briefcase}
+              title="Business Impact"
+              subtitle="SLA risks and downstream effects"
+              isExpanded={!collapsedSections.impact}
+              onToggle={() => toggleSection("impact")}
+            >
+              <div className="highlight-card info">
+                <p className="metadata-value">{ai.business_impact || incident.business_impact || "Potential latency spikes across dependent notification webhook listeners (~12% affected)."}</p>
+              </div>
+            </AccordionSection>
+
+            {/* 5. RECOMMENDATIONS */}
+            <AccordionSection
+              icon={ShieldCheck}
+              title="Recommended Actions"
+              subtitle="Checklist of mitigation steps"
+              isExpanded={!collapsedSections.recommended}
+              onToggle={() => toggleSection("recommended")}
+            >
+              <div className="checklist-container">
+                {recommendations.map((rec, i) => (
+                  <div key={i} className="checklist-item">
+                    <CheckCircle2 size={18} className="checklist-icon" />
+                    <span className="metadata-value">{rec.replace(/^\d+\.\s*/, '')}</span>
+                  </div>
+                ))}
+              </div>
+            </AccordionSection>
+
+            {/* 6. COMMENTS */}
+            <AccordionSection
+              icon={MessageSquare}
+              title={`Discussion (${comments.length})`}
+              subtitle="Engineer notes and collaborative updates"
+              isExpanded={!collapsedSections.comments}
+              onToggle={() => toggleSection("comments")}
+            >
+              <div className="enterprise-comments">
+                {comments.map((c) => (
+                  <div key={c.id} className="comment-card">
+                    <div className="comment-avatar">{c.author.charAt(0)}</div>
+                    <div className="comment-details">
+                      <div className="comment-header">
+                        <span className="comment-name">{c.author}</span>
+                        <span className="comment-timestamp">{c.time}</span>
                       </div>
+                      <p className="comment-text">{c.text}</p>
                     </div>
-                  ) : (
-                    <p className="ai-empty">AI Analysis model generated automated telemetry for this incident.</p>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleAddComment} className="enterprise-comment-form">
+                <input
+                  type="text"
+                  className="enterprise-input"
+                  placeholder="Add an investigation note..."
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                />
+                <button type="submit" className="enterprise-btn-primary">Post</button>
+              </form>
+            </AccordionSection>
+
+            {/* 7. TIMELINE */}
+            <AccordionSection
+              icon={Clock3}
+              title="Timeline"
+              subtitle="Chronological event history"
+              isExpanded={!collapsedSections.timeline}
+              onToggle={() => toggleSection("timeline")}
+            >
+              <Timeline timeline={timeline} />
+            </AccordionSection>
+
+            {/* 8. AUDIT LOG */}
+            <AccordionSection
+              icon={FileSearch}
+              title="Audit Log"
+              subtitle="System state tracking entries"
+              isExpanded={!collapsedSections.auditLog}
+              onToggle={() => toggleSection("auditLog")}
+            >
+              <table className="enterprise-table">
+                <thead>
+                  <tr>
+                    <th>TIMESTAMP</th>
+                    <th>ACTION</th>
+                    <th>ACTOR</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>{formatDate(incident.created_at)}</td>
+                    <td><span className="audit-badge">INCIDENT_CREATED</span></td>
+                    <td>User #{incident.created_by || "System"}</td>
+                  </tr>
+                  {incident.updated_at && (
+                    <tr>
+                      <td>{formatDate(incident.updated_at)}</td>
+                      <td><span className="audit-badge update">INCIDENT_UPDATED</span></td>
+                      <td>System Triage Engine</td>
+                    </tr>
                   )}
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 3: ROOT CAUSE */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("rootCause")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">🔍</span>
-                  <div>
-                    <h3 className="section-heading">Probable Root Cause</h3>
-                    <span className="section-subtitle">Underlying system trigger or anomaly</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.rootCause ? "▶" : "▼"}
-                </span>
-              </div>
-              {!collapsedSections.rootCause && (
-                <div className="accordion-content-body animated-content">
-                  <div className="info-card warning-border">
-                    <p className="field-content-text">
-                      {ai.probable_root_cause || incident.root_cause || "Primary root cause: Connection pool starvation under peak concurrent API traffic."}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 4: IMPACT ANALYSIS */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("impact")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">⚡</span>
-                  <div>
-                    <h3 className="section-heading">Business Impact Analysis</h3>
-                    <span className="section-subtitle">SLA & downstream system impact</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.impact ? "▶" : "▼"}
-                </span>
-              </div>
-              {!collapsedSections.impact && (
-                <div className="accordion-content-body animated-content">
-                  <div className="info-card">
-                    <p className="field-content-text">
-                      {ai.business_impact || incident.business_impact || "Potential latency spikes across dependent notification webhook listeners (~12% affected)."}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 5: RECOMMENDED ACTIONS */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("recommended")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">💡</span>
-                  <div>
-                    <h3 className="section-heading">Recommended Mitigation Actions</h3>
-                    <span className="section-subtitle">Suggested resolution steps</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.recommended ? "▶" : "▼"}
-                </span>
-              </div>
-              {!collapsedSections.recommended && (
-                <div className="accordion-content-body animated-content">
-                  <div className="info-card action-border">
-                    <p className="field-content-text action-text">
-                      {ai.recommended_actions || incident.recommended_actions || "1. Increase database pool size limit.\n2. Enable automatic rate limiting on ingestion endpoints."}
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 6: COMMENTS */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("comments")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">💬</span>
-                  <div>
-                    <h3 className="section-heading">Incident Discussion & Comments ({comments.length})</h3>
-                    <span className="section-subtitle">Collaborative engineer notes</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.comments ? "▶" : "▼"}
-                </span>
-              </div>
-              {!collapsedSections.comments && (
-                <div className="accordion-content-body animated-content">
-                  <div className="comments-container">
-                    <div className="comments-list">
-                      {comments.map((c) => (
-                        <div key={c.id} className="comment-item">
-                          <div className="comment-meta">
-                            <strong className="comment-author">{c.author}</strong>
-                            <span className="comment-time">{c.time}</span>
-                          </div>
-                          <p className="comment-body">{c.text}</p>
-                        </div>
-                      ))}
-                    </div>
-                    <form onSubmit={handleAddComment} className="comment-input-form">
-                      <input
-                        type="text"
-                        className="comment-input"
-                        placeholder="Add an investigation note or update..."
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                      />
-                      <button type="submit" className="primary-button small-btn">
-                        Post
-                      </button>
-                    </form>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 7: TIMELINE */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("timeline")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">⏱️</span>
-                  <div>
-                    <h3 className="section-heading">Action Timeline</h3>
-                    <span className="section-subtitle">Historical activity log</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.timeline ? "▶" : "▼"}
-                </span>
-              </div>
-              {!collapsedSections.timeline && (
-                <div className="accordion-content-body animated-content">
-                  <Timeline timeline={timeline} />
-                </div>
-              )}
-            </div>
-
-            {/* SECTION 8: AUDIT LOG */}
-            <div className="drawer-collapsible-section">
-              <div
-                className="section-accordion-header"
-                onClick={() => toggleSection("auditLog")}
-              >
-                <div className="accordion-title-group">
-                  <span className="accordion-icon">📜</span>
-                  <div>
-                    <h3 className="section-heading">System Audit Log</h3>
-                    <span className="section-subtitle">System state tracking entries</span>
-                  </div>
-                </div>
-                <span className="accordion-toggle-icon">
-                  {collapsedSections.auditLog ? "▶" : "▼"}
-                </span>
-              </div>
-              {!collapsedSections.auditLog && (
-                <div className="accordion-content-body animated-content">
-                  <div className="audit-log-container">
-                    <div className="audit-log-item">
-                      <span className="audit-time">{formatDate(incident.created_at)}</span>
-                      <span className="audit-action">INCIDENT_CREATED</span>
-                      <span className="audit-actor">User #{incident.created_by || "System"}</span>
-                    </div>
-                    {incident.updated_at && (
-                      <div className="audit-log-item">
-                        <span className="audit-time">{formatDate(incident.updated_at)}</span>
-                        <span className="audit-action">INCIDENT_UPDATED</span>
-                        <span className="audit-actor">System Triage Engine</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
+                </tbody>
+              </table>
+            </AccordionSection>
           </div>
         )}
       </div>

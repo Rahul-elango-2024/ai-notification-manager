@@ -4,11 +4,14 @@ import "./AIRecommendations.css";
 export default function AIRecommendations({ recommendations, onOpenDetails, onExecute }) {
   if (!recommendations || recommendations.length === 0) {
     return (
-      <div className="recommendations-container enterprise-card">
-        <div className="card-header">
-          <h3 className="card-title">AI Recommendations</h3>
+      <div className="recommendations-container panel">
+        <div className="panel-header">
+          <div>
+            <h2>AI Recommendations</h2>
+            <p>Prescriptive actions ranked by predicted impact.</p>
+          </div>
         </div>
-        <div className="recommendations-grid empty-recs-state">
+        <div className="empty-recs-state">
           No recommendations available
         </div>
       </div>
@@ -16,9 +19,12 @@ export default function AIRecommendations({ recommendations, onOpenDetails, onEx
   }
 
   return (
-    <div className="recommendations-container enterprise-card">
-      <div className="card-header">
-        <h3 className="card-title">AI Recommendations</h3>
+    <div className="recommendations-container panel">
+      <div className="panel-header">
+        <div>
+          <h2>AI Recommendations</h2>
+          <p>Prescriptive actions ranked by predicted impact.</p>
+        </div>
       </div>
       <div className="recommendations-grid">
         {recommendations.map((rec, idx) => {

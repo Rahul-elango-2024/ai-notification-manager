@@ -50,7 +50,7 @@
   margin: 8px 0 0;
   font-size: 1.25rem;
   font-weight: 600;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .exec-close-btn {
@@ -64,7 +64,7 @@
 }
 
 .exec-close-btn:hover {
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .exec-drawer-body {
@@ -89,7 +89,7 @@
   background: #0f172a;
   padding: 16px;
   border-radius: 8px;
-  border: 1px solid #334155;
+  border: 1px solid var(--border);
   align-self: start;
 }
 
@@ -129,13 +129,13 @@
 
 .exec-meta-label {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--text-muted);
   text-transform: uppercase;
 }
 
 .exec-meta-item strong {
   font-size: 0.9rem;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 /* Timeline */
@@ -190,7 +190,7 @@
 
 .exec-timeline-time {
   font-size: 0.75rem;
-  color: #64748b;
+  color: var(--text-muted);
 }
 
 .exec-drawer-footer {
@@ -227,11 +227,11 @@
 .exec-secondary-button {
   background: transparent;
   border: 1px solid #475569;
-  color: #cbd5e1;
+  color: var(--text-secondary);
 }
 .exec-secondary-button:hover {
   background: #334155;
-  color: #f8fafc;
+  color: var(--text-primary);
 }
 
 .exec-danger-button {

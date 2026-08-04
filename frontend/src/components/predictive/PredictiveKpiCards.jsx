@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, AlertOctagon, TrendingUp, ShieldAlert } from "
 import "./PredictiveKpiCards.css";
 
 export default function PredictiveKpiCards({ overview }) {
+  const kpis = [
     {
       title: "Risk Score",
       value: overview?.overallRiskScore || 0,
@@ -43,14 +44,21 @@ export default function PredictiveKpiCards({ overview }) {
   return (
     <div className="predictive-kpi-grid">
       {kpis.map((kpi, idx) => (
-        <div key={idx} className={`kpi-card kpi-card-${kpi.status}`}>
-          <div className="kpi-header">
-            <span className="kpi-title">{kpi.title}</span>
-            <span className="kpi-icon">{kpi.icon}</span>
+        <div key={idx} className={`metric-card predictive-kpi-card ${kpi.status}`}>
+          <div className="metric-card-top">
+            <div className={`metric-icon ${kpi.status === "critical" ? "red" : kpi.status === "warning" ? "blue" : "green"}`}>
+              {kpi.icon}
+            </div>
+            <span className="metric-label">{kpi.title}</span>
           </div>
-          <div className="kpi-value-container">
-            <span className="kpi-value">{kpi.value}</span>
-            <span className="kpi-unit">{kpi.unit}</span>
+          <strong className="metric-value">
+            {kpi.value} <span className="predictive-kpi-unit">{kpi.unit}</span>
+          </strong>
+          <span className="metric-description">
+            Forecasted from live telemetry
+          </span>
+          <div className="predictive-kpi-track" aria-hidden="true">
+            <span className={`predictive-kpi-fill ${kpi.status}`} />
           </div>
         </div>
       ))}

@@ -28,6 +28,8 @@ export default function RecommendationModals({
   const [completedSteps, setCompletedSteps] = useState([]);
   const [currentStepIdx, setCurrentStepIdx] = useState(0);
   const [executionResult, setExecutionResult] = useState(null);
+  const progressPercent = Math.round((currentStepIdx / EXECUTION_STEPS.length) * 100);
+  const progressBucket = Math.min(100, Math.max(0, Math.round(progressPercent / 10) * 10));
   
   // Close modals on Escape
   useEffect(() => {
@@ -243,12 +245,11 @@ export default function RecommendationModals({
                 
                 <div className="progress-bar-container">
                   <div 
-                    className="progress-bar-fill" 
-                    style={{ width: `${(currentStepIdx / EXECUTION_STEPS.length) * 100}%` }}
+                    className={`progress-bar-fill progress-bar-fill-${progressBucket}`} 
                   ></div>
                 </div>
                 <div className="progress-percentage">
-                  {Math.round((currentStepIdx / EXECUTION_STEPS.length) * 100)}%
+                  {progressPercent}%
                 </div>
 
                 <div className="steps-container">

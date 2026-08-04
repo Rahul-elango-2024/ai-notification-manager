@@ -372,23 +372,23 @@
 }
 
 .btn-view { background: rgba(37, 99, 235, 0.12); color: #2563eb; border-color: rgba(37, 99, 235, 0.25); }
-.btn-view:hover { background: #2563eb; color: #ffffff; }
+.btn-view:hover { background: #2563eb; color: var(--text-inverse); }
 
 .btn-rotate { background: rgba(217, 119, 6, 0.12); color: #d97706; border-color: rgba(217, 119, 6, 0.25); }
-.btn-rotate:hover { background: #d97706; color: #ffffff; }
+.btn-rotate:hover { background: #d97706; color: var(--text-inverse); }
 
 .btn-toggle { background: rgba(148, 163, 184, 0.15); color: var(--text-primary); border-color: var(--border); }
 .btn-toggle:hover { background: var(--border); }
 
 .btn-revoke { background: rgba(234, 88, 12, 0.12); color: #ea580c; border-color: rgba(234, 88, 12, 0.25); }
-.btn-revoke:hover { background: #ea580c; color: #ffffff; }
+.btn-revoke:hover { background: #ea580c; color: var(--text-inverse); }
 
 .btn-delete-red { background: rgba(220, 38, 38, 0.12); color: #dc2626; border-color: rgba(220, 38, 38, 0.25); }
-.btn-delete-red:hover { background: #dc2626; color: #ffffff; }
+.btn-delete-red:hover { background: #dc2626; color: var(--text-inverse); }
 
 .danger-button-red {
   background: #dc2626;
-  color: #ffffff;
+  color: var(--text-inverse);
   border: none;
   padding: 0.6rem 1.2rem;
   border-radius: 8px;

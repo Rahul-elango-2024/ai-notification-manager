@@ -1,99 +1,33 @@
 .predictive-analytics-page {
-  padding: 24px;
-  background-color: #0f172a;
+  padding: 0;
+  background: transparent;
   min-height: 100vh;
-  color: #f8fafc;
-}
-
-.page-heading {
-  margin-bottom: 24px;
-}
-
-.main-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0;
-  letter-spacing: -0.02em;
+  color: var(--text-primary);
 }
 
 .predictive-dashboard-grid {
   display: flex;
   flex-direction: column;
+  gap: 20px;
 }
 
 .predictive-main-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.95fr);
+  gap: 20px;
   align-items: start;
 }
 
 .predictive-col-left {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 20px;
 }
 
 .predictive-col-right {
   display: flex;
   flex-direction: column;
-  gap: 24px;
-}
-
-/* Global utility for Enterprise Cards */
-.enterprise-card {
-  background: #1e293b;
-  border: 1px solid #334155;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-}
-
-.card-header {
-  padding: 16px 20px;
-  border-bottom: 1px solid #334155;
-  background: #1e293b;
-}
-
-.card-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-  color: #f8fafc;
-}
-
-/* Base button styles */
-.primary-button, .secondary-button {
-  padding: 6px 16px;
-  border-radius: 4px;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-}
-
-.primary-button {
-  background: #3b82f6;
-  color: white;
-}
-.primary-button:hover:not(:disabled) {
-  background: #2563eb;
-}
-
-.secondary-button {
-  background: transparent;
-  border: 1px solid #475569;
-  color: #cbd5e1;
-}
-.secondary-button:hover:not(:disabled) {
-  background: #334155;
-  color: #f8fafc;
-}
-
-.primary-button:disabled, .secondary-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
+  gap: 20px;
 }
 
 @media (max-width: 1200px) {

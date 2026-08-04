@@ -63,9 +63,12 @@ export default function RiskHeatmap({ departmentRisks }) {
   };
 
   return (
-    <div className="risk-heatmap-container enterprise-card">
-      <div className="card-header">
-        <h3 className="card-title">Department Risk Heatmap</h3>
+    <div className="risk-heatmap-container panel">
+      <div className="panel-header">
+        <div>
+          <h2>Department Risk Heatmap</h2>
+          <p>Department-level exposure across current and forecast risk bands.</p>
+        </div>
       </div>
       <div className="heatmap-grid" onMouseLeave={() => setHoveredCell(null)}>
         <div className="heatmap-header-row">

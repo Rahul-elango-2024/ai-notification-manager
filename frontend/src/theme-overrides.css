@@ -61,6 +61,132 @@
 [data-theme="dark"] :where(.col-count-badge, .kanban-column-header, .task-card-action-row, .prompt-buttons-group) { border-color: var(--border) !important; color: var(--text-secondary) !important; }
 [data-theme="dark"] .col-count-badge { background: var(--surface-hover) !important; }
 
+/* Predictive Analytics should inherit the same dashboard card language. */
+:where(.predictive-analytics-page) :where(.panel, .metric-card, .forecast-chart-container, .recommendations-container, .risk-heatmap-container, .forecast-history-container) {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+:where(.predictive-analytics-page) :where(.panel-header, .card-header) {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+
+:where(.predictive-analytics-page) :where(.panel-header h2, .card-title, .chart-title, .kpi-title) {
+  color: var(--text-primary) !important;
+}
+
+:where(.predictive-analytics-page) :where(.panel-header p, .metric-description, .rec-impact, .empty-chart-state, .empty-history-state) {
+  color: var(--text-secondary) !important;
+}
+
+:where(.predictive-analytics-page) :where(.data-table th) {
+  background: var(--surface) !important;
+  color: var(--text-secondary) !important;
+}
+
+:where(.predictive-analytics-page) :where(.data-table td) {
+  color: var(--text-primary) !important;
+}
+
+:where(.predictive-analytics-page) :where(.heatmap-tooltip, .predictive-chart-tooltip) {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+/* Incident drawer accordion alignment. */
+:where(.drawer-overlay, .modal-backdrop) {
+  background: rgba(15, 23, 42, 0.72) !important;
+}
+
+:where(.enterprise-accordion) {
+  overflow: hidden;
+}
+
+:where(.accordion-header) {
+  align-items: center;
+}
+
+:where(.accordion-header-left) {
+  min-width: 0;
+}
+
+:where(.accordion-title-block) {
+  min-width: 0;
+}
+
+:where(.accordion-chevron) {
+  flex-shrink: 0;
+}
+
+/* Alerts workspace should not leave trailing blank space after the list. */
+.alerts-workspace {
+  align-items: start;
+}
+
+.alert-browser-list {
+  max-height: none;
+}
+
+/* Executive collaboration messaging and drawers. */
+:where(.ems-sidebar, .ems-chat-area, .ems-ai-card, .ems-message-bubble, .ems-composer-area, .ems-user-item, .ems-search-box, .exec-drawer-content, .exec-drawer-header, .exec-drawer-footer, .exec-drawer-side-col) {
+  background: var(--card) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+
+:where(.ems-sidebar-header, .ems-chat-header, .ems-message-header, .exec-section-title-sm, .exec-meta-label, .ems-user-role, .ems-chat-subtitle, .ems-message-time, .ems-typing-indicator) {
+  color: var(--text-secondary) !important;
+}
+
+:where(.ems-icon-btn, .ems-send-btn, .ems-ai-btn, .exec-primary-button, .exec-secondary-button, .exec-danger-button) {
+  border-color: var(--border) !important;
+}
+
+:where(.ems-send-btn, .exec-primary-button) {
+  background: var(--primary) !important;
+  color: var(--text-on-primary) !important;
+}
+
+:where(.ems-send-btn:hover, .exec-primary-button:hover) {
+  background: var(--primary-hover) !important;
+}
+
+:where(.ems-ai-btn.secondary, .exec-secondary-button) {
+  background: var(--surface) !important;
+  color: var(--text-secondary) !important;
+}
+
+:where(.ems-ai-btn.secondary:hover, .exec-secondary-button:hover) {
+  background: var(--surface-hover) !important;
+  color: var(--text-primary) !important;
+}
+
+:where(.ems-ai-btn.primary) {
+  background: var(--primary) !important;
+  color: var(--text-on-primary) !important;
+}
+
+/* Width buckets for dynamic progress indicators. */
+.risk-fill-10, .risk-progress-fill-10, .progress-bar-fill-10 { width: 10%; }
+.risk-fill-20, .risk-progress-fill-20, .progress-bar-fill-20 { width: 20%; }
+.risk-fill-30, .risk-progress-fill-30, .progress-bar-fill-30 { width: 30%; }
+.risk-fill-40, .risk-progress-fill-40, .progress-bar-fill-40 { width: 40%; }
+.risk-fill-50, .risk-progress-fill-50, .progress-bar-fill-50 { width: 50%; }
+.risk-fill-60, .risk-progress-fill-60, .progress-bar-fill-60 { width: 60%; }
+.risk-fill-70, .risk-progress-fill-70, .progress-bar-fill-70 { width: 70%; }
+.risk-fill-80, .risk-progress-fill-80, .progress-bar-fill-80 { width: 80%; }
+.risk-fill-90, .risk-progress-fill-90, .progress-bar-fill-90 { width: 90%; }
+.risk-fill-100, .risk-progress-fill-100, .progress-bar-fill-100 { width: 100%; }
+.risk-fill-0, .risk-progress-fill-0, .progress-bar-fill-0 { width: 0%; }
+
+.predictive-chart-body {
+  min-height: 260px;
+}
+
 /* Consistent page density and responsive behavior. */
 .sidebar { overflow: hidden; }
 .sidebar-nav { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding-right: 4px; scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent; }

@@ -14,12 +14,44 @@ import {
 } from "recharts";
 import "./ForecastChart.css";
 
+function ForecastTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) {
+    return null;
+  }
+
+  const item = payload[0].payload;
+
+  return (
+    <div className="predictive-chart-tooltip">
+      <strong>{label}</strong>
+      <span className="tooltip-line danger">Critical: {item.historical_value}</span>
+      <span className="tooltip-line warning">Forecast: {item.forecasted_value}</span>
+      <span className="tooltip-line muted">
+        Range: {Math.round(item.lower_bound)} - {Math.round(item.upper_bound)}
+      </span>
+    </div>
+  );
+}
+
+function ForecastLegend() {
+  return (
+    <div className="predictive-chart-legend">
+      <span><i className="legend-swatch history" />Historical</span>
+      <span><i className="legend-swatch forecast" />Forecast</span>
+      <span><i className="legend-swatch target" />Target</span>
+    </div>
+  );
+}
+
 export default function ForecastChart({ forecasts }) {
   if (!forecasts || forecasts.length === 0) {
     return (
-      <div className="forecast-chart-container enterprise-card">
-        <div className="chart-header">
-          <h3 className="chart-title">System Health Forecast</h3>
+      <div className="forecast-chart-container panel">
+        <div className="panel-header">
+          <div>
+            <h2>System Health Forecast</h2>
+            <p>Projected KPI trajectory and control thresholds.</p>
+          </div>
         </div>
         <div className="chart-body empty-chart-state">
           No forecast data available
@@ -69,43 +101,38 @@ export default function ForecastChart({ forecasts }) {
   });
 
   return (
-    <div className="forecast-chart-container enterprise-card">
-      <div className="chart-header">
-        <h3 className="chart-title">{targetForecast.kpi_name} Forecast</h3>
-        <div className="chart-actions">
-          <button className="chart-btn">Zoom</button>
-          <button className="chart-btn">Pan</button>
+    <div className="forecast-chart-container panel">
+      <div className="panel-header">
+        <div>
+          <h2>{targetForecast.kpi_name} Forecast</h2>
+          <p>Automatically switches grid and labels for the active theme.</p>
         </div>
       </div>
       <div className="chart-body">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-            <XAxis dataKey="time" stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} />
-            <YAxis stroke="#94a3b8" fontSize={12} tickLine={false} axisLine={false} domain={['auto', 'auto']} />
-            <Tooltip
-              cursor={false}
-              contentStyle={{ backgroundColor: "#0f172a", borderColor: "#334155", borderRadius: "6px", color: "#f8fafc" }}
-              itemStyle={{ color: "#cbd5e1" }}
-            />
-            <Legend wrapperStyle={{ fontSize: "12px", color: "#94a3b8" }} iconType="circle" />
+            <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" vertical={false} />
+            <XAxis dataKey="time" stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} />
+            <YAxis stroke="var(--text-muted)" fontSize={12} tickLine={false} axisLine={false} domain={["auto", "auto"]} />
+            <Tooltip cursor={false} content={<ForecastTooltip />} />
+            <Legend content={<ForecastLegend />} />
             
             {/* Confidence Band */}
-            <Area type="monotone" dataKey="upper_bound" stroke="none" fill="#3b82f6" fillOpacity={0.1} />
-            <Area type="monotone" dataKey="lower_bound" stroke="none" fill="#0f172a" fillOpacity={1} />
+            <Area type="monotone" dataKey="upper_bound" stroke="none" fill="var(--primary)" fillOpacity={0.12} />
+            <Area type="monotone" dataKey="lower_bound" stroke="none" fill="var(--card)" fillOpacity={1} />
             
             {/* Warning / Critical Thresholds */}
-            <ReferenceLine y={targetForecast.warning_threshold} stroke="#f59e0b" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Warning', fill: '#f59e0b', fontSize: 10 }} />
-            <ReferenceLine y={targetForecast.critical_threshold} stroke="#ef4444" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Critical', fill: '#ef4444', fontSize: 10 }} />
+            <ReferenceLine y={targetForecast.warning_threshold} stroke="var(--warning)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Warning', fill: 'var(--warning)', fontSize: 10 }} />
+            <ReferenceLine y={targetForecast.critical_threshold} stroke="var(--danger)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Critical', fill: 'var(--danger)', fontSize: 10 }} />
             
             {/* Target Line */}
-            <ReferenceLine y={targetForecast.target_value} stroke="#10b981" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Target', fill: '#10b981', fontSize: 10 }} />
+            <ReferenceLine y={targetForecast.target_value} stroke="var(--success)" strokeDasharray="3 3" label={{ position: 'insideTopLeft', value: 'Target', fill: 'var(--success)', fontSize: 10 }} />
 
             {/* Historical Line */}
-            <Line type="monotone" dataKey="historical_value" name="Historical" stroke="#94a3b8" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="historical_value" name="Historical" stroke="var(--text-muted)" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
             
             {/* Forecast Line */}
-            <Line type="monotone" dataKey="forecasted_value" name="Forecast" stroke="#3b82f6" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 4 }} />
+            <Line type="monotone" dataKey="forecasted_value" name="Forecast" stroke="var(--primary)" strokeWidth={2} strokeDasharray="5 5" dot={false} activeDot={{ r: 4 }} />
           </ComposedChart>
         </ResponsiveContainer>
       </div>

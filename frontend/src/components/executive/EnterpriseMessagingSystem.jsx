@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import { chatApi } from "../../services/chatApi";
 import { authService } from "../../services/authService";
 import socket from "../../services/socket";
+import { Paperclip, Smile, AtSign, Sparkles } from "lucide-react";
 import "./EnterpriseMessagingSystem.css";
 
 export default function EnterpriseMessagingSystem() {
@@ -239,7 +240,10 @@ export default function EnterpriseMessagingSystem() {
                   
                   {isAiCard ? (
                     <div className="ems-ai-card">
-                      <div className="ems-ai-card-title">✨ AI Analysis Recommendation</div>
+                      <div className="ems-ai-card-title">
+                        <Sparkles size={16} />
+                        AI Analysis Recommendation
+                      </div>
                       <div className="ems-ai-section">
                         <div className="ems-ai-label">Root Cause</div>
                         <div className="ems-ai-value">{attachments.rootCause}</div>
@@ -275,27 +279,27 @@ export default function EnterpriseMessagingSystem() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="ems-composer-area">
-            <div className="ems-composer-inner">
-              <button className="ems-icon-btn">📎</button>
-              <textarea 
-                className="ems-composer-input"
-                placeholder="Type a message or use @Gemini for AI assistance..."
-                value={inputValue}
-                onChange={(e) => {
-                  setInputValue(e.target.value);
-                  socket.emit("typing", { roomId: activeRoom, userId: currentUser.id, name: currentUser.fullName });
-                }}
-                onKeyDown={handleKeyDown}
-                rows={1}
-              />
-              <div className="ems-composer-actions">
-                <button className="ems-icon-btn">😊</button>
-                <button className="ems-icon-btn">@</button>
-                <button className="ems-send-btn" onClick={handleSend}>Send</button>
+            <div className="ems-composer-area">
+              <div className="ems-composer-inner">
+                <button className="ems-icon-btn"><Paperclip size={20} strokeWidth={2} /></button>
+                <textarea 
+                  className="ems-composer-input"
+                  placeholder="Type a message or use @Gemini for AI assistance..."
+                  value={inputValue}
+                  onChange={(e) => {
+                    setInputValue(e.target.value);
+                    socket.emit("typing", { roomId: activeRoom, userId: currentUser.id, name: currentUser.fullName });
+                  }}
+                  onKeyDown={handleKeyDown}
+                  rows={1}
+                />
+                <div className="ems-composer-actions">
+                  <button className="ems-icon-btn"><Smile size={20} strokeWidth={2} /></button>
+                  <button className="ems-icon-btn"><AtSign size={20} strokeWidth={2} /></button>
+                  <button className="ems-send-btn" onClick={handleSend}>Send</button>
+                </div>
               </div>
             </div>
-          </div>
         </div>
       ) : (
         <div className="ems-empty-state">

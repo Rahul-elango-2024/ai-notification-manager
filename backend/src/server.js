@@ -40,6 +40,7 @@ app.use(express.json());
 
 const searchRoutes = require("./routes/searchRoutes");
 const aiRoutes = require("./routes/aiRoutes");
+const dataSourceRoutes = require("./routes/dataSourceRoutes");
 
 app.use("/api/health", healthRoutes);
 app.use("/api", configurationRoutes);
@@ -64,6 +65,7 @@ app.use("/api/executive", executiveRoutes);
 app.use("/api", chatRoutes);
 app.use("/api", searchRoutes);
 app.use("/api", aiRoutes);
+app.use("/api/data-sources", dataSourceRoutes);
 // ==========================================
 // CONFIGURATION
 // ==========================================
@@ -210,6 +212,48 @@ async function runMigrations() {
         attempt_count INTEGER DEFAULT 1,
         error_message TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Data Source Management Tables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS data_sources (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        type VARCHAR(50) NOT NULL,
+        connection_mode VARCHAR(20) DEFAULT 'REAL',
+        base_url TEXT,
+        authentication_type VARCHAR(50),
+        api_key_encrypted TEXT,
+        headers JSONB,
+        polling_interval INTEGER DEFAULT 60000,
+        status VARCHAR(20) DEFAULT 'Disconnected',
+        last_sync TIMESTAMP NULL,
+        response_time INTEGER,
+        last_error TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS sync_history (
+        id SERIAL PRIMARY KEY,
+        source_id INTEGER REFERENCES data_sources(id) ON DELETE CASCADE,
+        sync_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) NOT NULL,
+        records_imported INTEGER DEFAULT 0,
+        duration_ms INTEGER,
+        error_message TEXT
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS data_source_mappings (
+        id SERIAL PRIMARY KEY,
+        source_id INTEGER REFERENCES data_sources(id) ON DELETE CASCADE,
+        external_field VARCHAR(100) NOT NULL,
+        internal_kpi_id INTEGER REFERENCES kpis(id) ON DELETE CASCADE
       );
     `);
 
@@ -493,6 +537,12 @@ const escalationInterval =
     processTimedEscalations,
     60 * 1000
   );
+
+// ==========================================
+// DATA SOURCE COLLECTOR
+// ==========================================
+const dataSourceCollectorService = require("./services/dataSourceCollectorService");
+dataSourceCollectorService.startCollector();
 
 // ==========================================
 // GRACEFUL SHUTDOWN

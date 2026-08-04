@@ -25,12 +25,12 @@ const CustomTooltip = ({ active, payload, label }) => {
   if (active && payload && payload.length) {
     const item = payload[0].payload;
     return (
-      <div className="chart-hover-popover" style={{ background: "#FFFFFF", border: "1px solid #E5E7EB", padding: "10px", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.1)", fontSize: "12px" }}>
-        <strong style={{ color: "#111827" }}>{label} Telemetry Brief</strong>
-        <div style={{ color: "#DC2626", marginTop: "4px" }}>Critical Incidents: {item.critical}</div>
-        <div style={{ color: "#F59E0B" }}>High Priority: {item.high}</div>
-        <div style={{ color: "#2563EB" }}>Medium Level: {item.medium}</div>
-        <div style={{ borderTop: "1px solid #E5E7EB", marginTop: "6px", paddingTop: "4px", color: "#6B7280" }}>
+      <div className="predictive-chart-tooltip">
+        <strong>{label} Telemetry Brief</strong>
+        <div className="tooltip-line danger">Critical Incidents: {item.critical}</div>
+        <div className="tooltip-line warning">High Priority: {item.high}</div>
+        <div className="tooltip-line muted">Medium Level: {item.medium}</div>
+        <div className="tooltip-line muted">
           Prev Day: {item.previous} ({item.pctChange} {item.trend}) | Conf: {item.confidence}
         </div>
       </div>
@@ -55,43 +55,43 @@ const PredictiveCharts = memo(function PredictiveCharts() {
 
   return (
     <div className="section-card trend-chart-card">
-      <div className="section-card-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      <div className="panel-header">
         <div>
           <h2 className="section-title">Forecast</h2>
           <span className="caption-text">Interactive Recharts Multi-Series Trend Line</span>
         </div>
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div>
           <button className="secondary-button small-btn" onClick={exportCSV}>
             Export CSV
           </button>
         </div>
       </div>
 
-      <div style={{ width: "100%", height: 260, marginTop: "12px" }}>
+      <div className="predictive-chart-body">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
             <defs>
               <linearGradient id="colorCritical" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#DC2626" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#DC2626" stopOpacity={0} />
+                <stop offset="5%" stopColor="var(--danger)" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="var(--danger)" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorHigh" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#F59E0B" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#F59E0B" stopOpacity={0} />
+                <stop offset="5%" stopColor="var(--warning)" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="var(--warning)" stopOpacity={0} />
               </linearGradient>
               <linearGradient id="colorMedium" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#2563EB" stopOpacity={0.4} />
-                <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.4} />
+                <stop offset="95%" stopColor="var(--primary)" stopOpacity={0} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
-            <XAxis dataKey="date" stroke="#6B7280" fontSize={11} />
-            <YAxis stroke="#6B7280" fontSize={11} />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+            <XAxis dataKey="date" stroke="var(--text-muted)" fontSize={11} />
+            <YAxis stroke="var(--text-muted)" fontSize={11} />
             <Tooltip content={<CustomTooltip />} />
-            <Legend wrapperStyle={{ fontSize: "11px", paddingTop: "6px" }} />
-            <Area type="monotone" dataKey="critical" stroke="#DC2626" fillOpacity={1} fill="url(#colorCritical)" name="Critical" />
-            <Area type="monotone" dataKey="high" stroke="#F59E0B" fillOpacity={1} fill="url(#colorHigh)" name="High" />
-            <Area type="monotone" dataKey="medium" stroke="#2563EB" fillOpacity={1} fill="url(#colorMedium)" name="Medium" />
+            <Legend />
+            <Area type="monotone" dataKey="critical" stroke="var(--danger)" fillOpacity={1} fill="url(#colorCritical)" name="Critical" />
+            <Area type="monotone" dataKey="high" stroke="var(--warning)" fillOpacity={1} fill="url(#colorHigh)" name="High" />
+            <Area type="monotone" dataKey="medium" stroke="var(--primary)" fillOpacity={1} fill="url(#colorMedium)" name="Medium" />
           </AreaChart>
         </ResponsiveContainer>
       </div>

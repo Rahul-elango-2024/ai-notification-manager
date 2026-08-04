@@ -231,8 +231,13 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-muted);
+  color: var(--text-secondary, #475467);
   cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+.checkbox-label:hover {
+  color: var(--text-primary, #111827);
 }
 
 .checkbox-label input[type="checkbox"] {

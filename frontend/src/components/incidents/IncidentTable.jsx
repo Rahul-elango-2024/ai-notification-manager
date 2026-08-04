@@ -283,7 +283,10 @@ const IncidentTable = memo(function IncidentTable({
                   const idText = inc.incident_number || `#${inc.id}`;
 
                   return (
-                    <tr key={inc.id} className="incident-row">
+                    <tr key={inc.id} className="incident-row clickable-row" onClick={(e) => {
+                      if (e.target.closest('.copy-id-btn') || e.target.closest('.action-btn')) return;
+                      onView(inc);
+                    }}>
                       <td>
                         <div className="id-badge-cell">
                           <span className="incident-number-tag">{idText}</span>
@@ -324,15 +327,8 @@ const IncidentTable = memo(function IncidentTable({
                       <td>
                         <span className="timestamp-text">{formatDate(inc.updated_at)}</span>
                       </td>
-                      <td style={{ textAlign: "right" }}>
+                      <td style={{ textAlign: "right", paddingRight: "16px" }}>
                         <div className="action-button-group">
-                          <button
-                            className="action-btn btn-view"
-                            onClick={() => onView(inc)}
-                            title="View Incident Drawer"
-                          >
-                            👁️ View
-                          </button>
                           <button
                             className="action-btn btn-edit"
                             onClick={() => onEdit(inc)}

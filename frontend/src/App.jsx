@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useRef } from "react";
 import React from "react";
 import { useLocation, useNavigate, Routes, Route } from "react-router-dom";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Database } from "lucide-react";
 import "./App.css";
 import Login from "./pages/Login";
 import { authService } from "./services/authService";
@@ -14,6 +14,7 @@ import ProfilePage from "./pages/Profile/ProfilePage";
 import SettingsPage from "./pages/Settings/SettingsPage";
 import IncidentManagement from "./pages/IncidentManagement";
 import ExecutiveCollaborationPage from "./pages/ExecutiveCollaboration/ExecutiveCollaborationPage";
+import DataSourcesPage from "./pages/DataSources/DataSourcesPage";
 
 import {
   canUpdateKPIs,
@@ -1001,8 +1002,9 @@ function App() {
         />
       </section>
 
-      <section className="overview-layout">
-        <div className="panel">
+      <section className="dashboard-masonry-layout">
+        <div className="dashboard-left-col">
+          <div className="panel">
           <div className="panel-header">
             <div>
               <h2>KPI Health Overview</h2>
@@ -1072,42 +1074,8 @@ function App() {
           </div>
         </div>
 
-        <div className="panel alert-detail-panel">
-          <div className="panel-header">
-            <div>
-              <h2>AI Alert Manager</h2>
-
-              <p>
-                Active alert intelligence and
-                recommended actions.
-              </p>
-            </div>
-          </div>
-
-          {selectedAlert ? (
-            <ErrorBoundary>
-              <AlertDetail
-                alert={selectedAlert}
-                analysis={selectedAnalysis}
-                notification={selectedAlertNotification}
-                alertDetails={alertDetails}
-                loadingAlertDetails={loadingAlertDetails}
-                formatDate={formatDate}
-                onResolve={resolveAlert}
-                onAcknowledge={acknowledgeAlert}
-                acknowledgingAlert={acknowledgingAlert}
-              />
-            </ErrorBoundary>
-          ) : (
-            <EmptyState
-              title="No alerts detected"
-              description="All monitored KPIs are currently operating without recorded alerts."
-            />
-          )}
-        </div>
-      </section>
-
-      <section className="overview-layout lower-overview">
+        
+      
         <div className="panel">
           <div className="panel-header">
             <div>
@@ -1265,8 +1233,47 @@ function App() {
             />
           </div>
         </div>
+      
+        </div>
+        
+        <div className="dashboard-right-col">
+          <div className="panel alert-detail-panel">
+          <div className="panel-header">
+            <div>
+              <h2>AI Alert Manager</h2>
+
+              <p>
+                Active alert intelligence and
+                recommended actions.
+              </p>
+            </div>
+          </div>
+
+          {selectedAlert ? (
+            <ErrorBoundary>
+              <AlertDetail
+                alert={selectedAlert}
+                analysis={selectedAnalysis}
+                notification={selectedAlertNotification}
+                alertDetails={alertDetails}
+                loadingAlertDetails={loadingAlertDetails}
+                formatDate={formatDate}
+                onResolve={resolveAlert}
+                onAcknowledge={acknowledgeAlert}
+                acknowledgingAlert={acknowledgingAlert}
+              />
+            </ErrorBoundary>
+          ) : (
+            <EmptyState
+              title="No alerts detected"
+              description="All monitored KPIs are currently operating without recorded alerts."
+            />
+          )}
+        </div>
+        </div>
       </section>
     </>
+
   );
 
   // ==========================================
@@ -1950,6 +1957,7 @@ function App() {
     "api-hub": renderApiHub,
     "predictive-analytics": renderPredictiveAnalytics,
     "simulation-center": renderSimulationCenter,
+    "data-sources": () => <DataSourcesPage />,
     profile: renderProfile,
     settings: renderSettings,
   };
@@ -2032,6 +2040,13 @@ function App() {
             onClick={() =>
               setActivePage("notifications")
             }
+          />
+
+          <NavButton
+            active={activePage === "data-sources"}
+            icon={<Database size={18} style={{ display: "inline-block", verticalAlign: "middle" }} />}
+            label="Data Sources"
+            onClick={() => setActivePage("data-sources")}
           />
 
           {canManageRoutes() && (

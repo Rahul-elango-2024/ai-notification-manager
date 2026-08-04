@@ -97,8 +97,10 @@ export default function PredictiveAnalyticsPage() {
   return (
     <div className="predictive-analytics-page full-width-page">
       <header className="page-heading">
-        <div className="header-title-block">
-          <h1 className="main-title">Predictive Analytics</h1>
+        <div>
+          <span className="eyebrow">PREDICTIVE ANALYTICS</span>
+          <h1>Predictive Analytics</h1>
+          <p>Forecasts, risk signals, and prescriptive recommendations that use the same dashboard design system.</p>
         </div>
       </header>
 
